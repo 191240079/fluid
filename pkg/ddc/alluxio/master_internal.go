@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Author.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +18,6 @@ package alluxio
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
@@ -25,14 +25,13 @@ import (
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/helm"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubectl"
-	yaml "gopkg.in/yaml.v2"
+	"sigs.k8s.io/yaml"
 )
 
 // setup the cache master
 func (e *AlluxioEngine) setupMasterInternal() (err error) {
 	var (
-		chartName = utils.GetChartsDirectory() + "/" + common.ALLUXIO_CHART
+		chartName = utils.GetChartsDirectory() + "/" + common.AlluxioChart
 	)
 
 	runtime, err := e.getRuntime()
@@ -40,7 +39,7 @@ func (e *AlluxioEngine) setupMasterInternal() (err error) {
 		return
 	}
 
-	valuefileName, err := e.generateAlluxioValueFile(runtime)
+	valueFileName, err := e.generateAlluxioValueFile(runtime)
 	if err != nil {
 		return
 	}
@@ -55,14 +54,14 @@ func (e *AlluxioEngine) setupMasterInternal() (err error) {
 		return
 	}
 
-	return helm.InstallRelease(e.name, e.namespace, valuefileName, chartName)
+	return helm.InstallRelease(e.name, e.namespace, valueFileName, chartName)
 }
 
 // generate alluxio struct
 func (e *AlluxioEngine) generateAlluxioValueFile(runtime *datav1alpha1.AlluxioRuntime) (valueFileName string, err error) {
 
 	//0. Check if the configmap exists
-	err = kubeclient.DeleteConfigMap(e.Client, e.getConfigmapName(), e.namespace)
+	err = kubeclient.DeleteConfigMap(e.Client, e.getHelmValuesConfigMapName(), e.namespace)
 
 	if err != nil {
 		e.Log.Error(err, "Failed to clean value files")
@@ -85,7 +84,7 @@ func (e *AlluxioEngine) generateAlluxioValueFile(runtime *datav1alpha1.AlluxioRu
 	}
 
 	//2. Get the template value file
-	valueFile, err := ioutil.TempFile(os.TempDir(), fmt.Sprintf("%s-%s-values.yaml", e.name, e.runtimeType))
+	valueFile, err := os.CreateTemp(os.TempDir(), fmt.Sprintf("%s-%s-values.yaml", e.name, e.engineImpl))
 	if err != nil {
 		e.Log.Error(err, "failed to create value file", "valueFile", valueFile.Name())
 		return valueFileName, err
@@ -94,13 +93,15 @@ func (e *AlluxioEngine) generateAlluxioValueFile(runtime *datav1alpha1.AlluxioRu
 	valueFileName = valueFile.Name()
 	e.Log.V(1).Info("Save the values file", "valueFile", valueFileName)
 
-	err = ioutil.WriteFile(valueFileName, data, 0400)
+	err = os.WriteFile(valueFileName, data, 0400)
 	if err != nil {
 		return
 	}
 
 	//3. Save the configfile into configmap
-	err = kubectl.CreateConfigMapFromFile(e.getConfigmapName(), "data", valueFileName, e.namespace)
+	runtimeInfo := e.runtimeInfo
+	ownerDatasetId := utils.GetDatasetId(runtimeInfo.GetNamespace(), runtimeInfo.GetName(), runtimeInfo.GetOwnerDatasetUID())
+	err = kubeclient.CreateConfigMap(e.Client, e.getHelmValuesConfigMapName(), e.namespace, "data", data, ownerDatasetId)
 	if err != nil {
 		return
 	}
@@ -108,6 +109,10 @@ func (e *AlluxioEngine) generateAlluxioValueFile(runtime *datav1alpha1.AlluxioRu
 	return valueFileName, err
 }
 
-func (e *AlluxioEngine) getConfigmapName() string {
-	return e.name + "-" + e.runtimeType + "-values"
+func (e *AlluxioEngine) getHelmValuesConfigMapName() string {
+	return e.name + "-" + e.engineImpl + "-values"
+}
+
+func (e *AlluxioEngine) getMountConfigmapName() string {
+	return e.name + "-mount-config"
 }

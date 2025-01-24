@@ -20,6 +20,7 @@ import (
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
+	"github.com/fluid-cloudnative/fluid/pkg/webhook/plugins/api"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -30,18 +31,18 @@ import (
 
 */
 
-const NAME = "PreferNodesWithoutCache"
+const Name = "PreferNodesWithoutCache"
 
 type PreferNodesWithoutCache struct {
 	client client.Client
 	name   string
 }
 
-func NewPlugin(c client.Client) *PreferNodesWithoutCache {
+func NewPlugin(c client.Client, args string) (api.MutatingHandler, error) {
 	return &PreferNodesWithoutCache{
 		client: c,
-		name:   NAME,
-	}
+		name:   Name,
+	}, nil
 }
 
 func (p *PreferNodesWithoutCache) GetName() string {

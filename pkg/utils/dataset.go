@@ -23,13 +23,19 @@ import (
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-//GetDataset gets the dataset.
-//It returns a pointer to the dataset if successful.
+const (
+	PVCStorageAnnotation   = "pvc.fluid.io/resources.requests.storage"
+	DefaultStorageCapacity = "100Pi"
+)
+
+// GetDataset gets the dataset.
+// It returns a pointer to the dataset if successful.
 func GetDataset(client client.Client, name, namespace string) (*datav1alpha1.Dataset, error) {
 
 	key := types.NamespacedName{
@@ -71,12 +77,36 @@ func GetAccessModesOfDataset(client client.Client, name, namespace string) (acce
 
 }
 
+func GetPVCStorageCapacityOfDataset(client client.Client, name, namespace string) (storageCapacity resource.Quantity, err error) {
+	dataset, err := GetDataset(client, name, namespace)
+	if err != nil {
+		return storageCapacity, fmt.Errorf("failed to get dataset %s/%s: %w", namespace, name, err)
+	}
+	annotations := dataset.GetObjectMeta().GetAnnotations()
+	if annotations == nil {
+		storageCapacity = resource.MustParse(DefaultStorageCapacity)
+		return
+	}
+	size := annotations[PVCStorageAnnotation]
+	if size == "" {
+		storageCapacity = resource.MustParse(DefaultStorageCapacity)
+		return
+	}
+
+	storageCapacity, err = resource.ParseQuantity(size)
+	if err != nil {
+		log.Info(fmt.Sprintf("failed to parse storage capacity '%s', using default '%s': %v\n", size, DefaultStorageCapacity, err))
+		return resource.MustParse(DefaultStorageCapacity), nil
+	}
+	return
+}
+
 // IsTargetPathUnderFluidNativeMounts checks if targetPath is a subpath under some given native mount point.
 // We check this for the reason that native mount points need extra metadata sync alluxioOperations.
 func IsTargetPathUnderFluidNativeMounts(targetPath string, dataset datav1alpha1.Dataset) bool {
 	for _, mount := range dataset.Spec.Mounts {
 
-		mPath := UFSPathBuilder{}.GenAlluxioMountPath(mount, dataset.Spec.Mounts)
+		mPath := UFSPathBuilder{}.GenUFSPathInUnifiedNamespace(mount)
 
 		//TODO(xuzhihao): HasPrefix is not enough.
 
@@ -154,14 +184,14 @@ func (u *UFSToUpdate) AnalyzePathsDelta() (specMountPaths, mountedMountPaths []s
 		if common.IsFluidNativeScheme(mount.MountPoint) {
 			continue
 		}
-		m := UFSPathBuilder{}.GenAlluxioMountPath(mount, u.dataset.Spec.Mounts)
+		m := UFSPathBuilder{}.GenUFSPathInUnifiedNamespace(mount)
 		specMountPaths = append(specMountPaths, m)
 	}
 	for _, mount := range u.dataset.Status.Mounts {
 		if common.IsFluidNativeScheme(mount.MountPoint) {
 			continue
 		}
-		m := UFSPathBuilder{}.GenAlluxioMountPath(mount, u.dataset.Status.Mounts)
+		m := UFSPathBuilder{}.GenUFSPathInUnifiedNamespace(mount)
 		mountedMountPaths = append(mountedMountPaths, m)
 	}
 

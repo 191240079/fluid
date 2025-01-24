@@ -17,20 +17,47 @@ limitations under the License.
 package portallocator
 
 import (
+	"fmt"
+
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/util/net"
-	"k8s.io/kubernetes/pkg/registry/core/service/allocator"
-	"k8s.io/kubernetes/pkg/registry/core/service/portallocator"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+type AllocatePolicy string
+
+const (
+	Random AllocatePolicy = "random"
+	BitMap AllocatePolicy = "bitmap"
+)
+
+func ValidateEnum(allocatePolicyStr string) (AllocatePolicy, error) {
+	switch AllocatePolicy(allocatePolicyStr) {
+	case Random, BitMap:
+		return AllocatePolicy(allocatePolicyStr), nil
+	default:
+		return AllocatePolicy(allocatePolicyStr), fmt.Errorf("runtime-port-allocator can only be random or bitmap")
+	}
+}
+
+type BatchAllocatorInterface interface {
+	Allocate(int) error
+
+	Release(int) error
+
+	AllocateBatch(portNum int) ([]int, error)
+	needResetReservedPorts() bool
+}
 
 // RuntimePortAllocator is an allocator resonsible for maintaining port usage information
 // given a user-defined port range. It allocates and releases ports when a port is requested or
 // reclaimed by a runtime.
 type RuntimePortAllocator struct {
-	pa     *portallocator.PortAllocator
+	pa             BatchAllocatorInterface
+	allocatePolicy AllocatePolicy
+
 	client client.Client
 	pr     *net.PortRange
 
@@ -44,9 +71,20 @@ type RuntimePortAllocator struct {
 // rpa is a global singleton of type RuntimePortAllocator
 var rpa *RuntimePortAllocator
 
-// SetupRuntimePortAllocator instantiates the global singleton rpa
-func SetupRuntimePortAllocator(client client.Client, pr *net.PortRange, getReservedPorts func(client client.Client) (ports []int, err error)) {
-	rpa = &RuntimePortAllocator{client: client, pr: pr, getReservedPorts: getReservedPorts}
+// SetupRuntimePortAllocator instantiates the global singleton rpa, set up port allocating policy according to the given allocatePolicyStr.
+// Currently the valid policies are either "random" or "bitmap".
+func SetupRuntimePortAllocator(client client.Client, pr *net.PortRange, allocatePolicyStr string, getReservedPorts func(client client.Client) (ports []int, err error)) error {
+	policy, err := ValidateEnum(allocatePolicyStr)
+	if err != nil {
+		return err
+	}
+	SetupRuntimePortAllocatorWithType(client, pr, policy, getReservedPorts)
+	return nil
+}
+
+// SetupRuntimePortAllocatorWithType instantiates the global singleton rpa with specified port allocating policy
+func SetupRuntimePortAllocatorWithType(client client.Client, pr *net.PortRange, allocatePolicy AllocatePolicy, getReservedPorts func(client client.Client) (ports []int, err error)) {
+	rpa = &RuntimePortAllocator{client: client, pr: pr, allocatePolicy: allocatePolicy, getReservedPorts: getReservedPorts}
 	rpa.log = ctrl.Log.WithName("RuntimePortAllocator")
 }
 
@@ -63,22 +101,31 @@ func GetRuntimePortAllocator() (*RuntimePortAllocator, error) {
 
 // createAndRestorePortAllocator creates and restores port allocator with runtime-specific logic
 func (alloc *RuntimePortAllocator) createAndRestorePortAllocator() (err error) {
-	alloc.pa, err = portallocator.NewPortAllocatorCustom(*alloc.pr, func(max int, rangeSpec string) (allocator.Interface, error) {
-		return allocator.NewAllocationMap(max, rangeSpec), nil
-	})
+	switch alloc.allocatePolicy {
+	case Random:
+		alloc.pa, err = newRandomAllocator(alloc.pr, alloc.log)
+	case BitMap:
+		alloc.pa, err = newBitMapAllocator(alloc.pr, alloc.log)
+	default:
+		err = errors.New("runtime-port-allocator can only be random or bitmap")
+	}
+
 	if err != nil {
 		return err
 	}
 
-	ports, err := alloc.getReservedPorts(alloc.client)
-	if err != nil {
-		return err
-	}
-	alloc.log.Info("Found reserved ports", "ports", ports)
+	// policy should check reserved ports
+	if alloc.pa.needResetReservedPorts() {
+		ports, err := alloc.getReservedPorts(alloc.client)
+		if err != nil {
+			return err
+		}
+		alloc.log.Info("Found reserved ports", "ports", ports)
 
-	for _, port := range ports {
-		if err = alloc.pa.Allocate(port); err != nil {
-			alloc.log.Error(err, "can't allocate reserved ports", "port", port)
+		for _, port := range ports {
+			if err = alloc.pa.Allocate(port); err != nil {
+				alloc.log.Error(err, "can't allocate reserved ports", "port", port)
+			}
 		}
 	}
 
@@ -92,21 +139,9 @@ func (alloc *RuntimePortAllocator) GetAvailablePorts(portNum int) (ports []int, 
 		return nil, errors.New("Runtime port allocator not setup")
 	}
 
-	for i := 0; i < portNum; i++ {
-		if availPort, err := alloc.pa.AllocateNext(); err != nil {
-			alloc.log.Error(err, "can't allocate next, all ports are in use")
-			break
-		} else {
-			ports = append(ports, availPort)
-		}
-	}
-
-	// Something unexpected happened, rollback to release allocated ports
-	if len(ports) < portNum {
-		for _, reservedPort := range ports {
-			_ = alloc.pa.Release(reservedPort)
-		}
-		return nil, errors.Errorf("can't get enough available ports, only %d ports are available", len(ports))
+	ports, err = alloc.pa.AllocateBatch(portNum)
+	if err != nil {
+		return ports, err
 	}
 
 	alloc.log.Info("Successfully allocated ports", "expeceted port num", portNum, "allocated ports", ports)

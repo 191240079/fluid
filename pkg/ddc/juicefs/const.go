@@ -17,16 +17,22 @@ limitations under the License.
 package juicefs
 
 const (
-	BlockCacheBytes     = "juicefs_blockcache_bytes"
-	BlockCacheHits      = "juicefs_blockcache_hits"
-	BlockCacheMiss      = "juicefs_blockcache_miss"
-	BlockCacheHitBytes  = "juicefs_blockcache_hit_bytes"
-	BlockCacheMissBytes = "juicefs_blockcache_miss_bytes"
-	UsedSpace           = "juicefs_used_space"
+	BlockCacheBytesOfEnterprise     = "blockcache.bytes"
+	BlockCacheHitsOfEnterprise      = "blockcache.hits"
+	BlockCacheMissOfEnterprise      = "blockcache.miss"
+	BlockCacheHitBytesOfEnterprise  = "blockcache.hitBytes"
+	BlockCacheMissBytesOfEnterprise = "blockcache.missBytes"
 
-	PodRoleType = "role"
+	BlockCacheBytesOfCommunity     = "juicefs_blockcache_bytes"
+	BlockCacheHitsOfCommunity      = "juicefs_blockcache_hits"
+	BlockCacheMissOfCommunity      = "juicefs_blockcache_miss"
+	BlockCacheHitBytesOfCommunity  = "juicefs_blockcache_hit_bytes"
+	BlockCacheMissBytesOfCommunity = "juicefs_blockcache_miss_bytes"
 
-	WorkerPodRole = "juicefs-worker"
+	workerPodRole      = "juicefs-worker"
+	EnterpriseEdition  = "enterprise"
+	CommunityEdition   = "community"
+	DefaultMetricsPort = 9567
 
 	MetadataSyncNotDoneMsg               = "[Calculating]"
 	CheckMetadataSyncDoneTimeoutMillisec = 500
@@ -35,11 +41,28 @@ const (
 
 	JuiceStorage   = "storage"
 	JuiceBucket    = "bucket"
+	JuiceBucket2   = "bucket2"
 	JuiceMetaUrl   = "metaurl"
 	JuiceAccessKey = "access-key"
 	JuiceSecretKey = "secret-key"
+	JuiceToken     = "token"
 
-	CacheDir               = "cachedir"
-	MountPath              = "mountpath"
-	DefaultDataLoadTimeout = "30m"
+	MountPath                 = "mountpath"
+	Edition                   = "edition"
+	MetaurlSecret             = "metaurlSecret"
+	MetaurlSecretKey          = "metaurlSecretKey"
+	TokenSecret               = "tokenSecret"
+	TokenSecretKey            = "tokenSecretKey"
+	AccessKeySecret           = "accesskeySecret"
+	AccessKeySecretKey        = "accesskeySecretKey"
+	SecretKeySecret           = "secretkeySecret"
+	SecretKeySecretKey        = "secretkeySecretKey"
+	AccessKey2                = "access-key2"
+	SecretKey2                = "secret-key2"
+	FormatCmd                 = "formatCmd"
+	Name                      = "name"
+	DefaultDataLoadTimeout    = "30m"
+	DefaultDataMigrateTimeout = "30m"
+
+	NativeVolumeMigratePath = "/mnt/fluid-native/"
 )

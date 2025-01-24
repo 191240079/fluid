@@ -1,9 +1,26 @@
+/*
+Copyright 2022 The Fluid Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package jindo
 
 import (
 	"testing"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ctrl"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
@@ -15,21 +32,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	utilpointer "k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func newJindoEngineREP(client client.Client, name string, namespace string) *JindoEngine {
 
-	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, "jindo", datav1alpha1.TieredStore{})
+	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, common.JindoRuntime)
 	engine := &JindoEngine{
 		runtime:     &datav1alpha1.JindoRuntime{},
 		name:        name,
 		namespace:   namespace,
 		Client:      client,
 		runtimeInfo: runTimeInfo,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 	}
 	engine.Helper = ctrl.BuildHelper(runTimeInfo, client, engine.Log)
 	return engine
@@ -158,7 +174,7 @@ func TestSyncReplicas(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(2),
+				Replicas: ptr.To[int32](2),
 			},
 		},
 		{
@@ -167,7 +183,7 @@ func TestSyncReplicas(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(2),
+				Replicas: ptr.To[int32](2),
 			},
 		},
 		{
@@ -176,7 +192,7 @@ func TestSyncReplicas(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(2),
+				Replicas: ptr.To[int32](2),
 			},
 		},
 	}
@@ -283,7 +299,7 @@ func TestSyncReplicas(t *testing.T) {
 	for _, testCase := range testCases {
 		engine := newJindoEngineREP(fakeClient, testCase.name, testCase.namespace)
 		err := engine.SyncReplicas(cruntime.ReconcileRequestContext{
-			Log:      log.NullLogger{},
+			Log:      fake.NullLogger(),
 			Recorder: record.NewFakeRecorder(300),
 		})
 		if err != nil {

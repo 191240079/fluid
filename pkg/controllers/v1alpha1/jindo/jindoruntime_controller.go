@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,14 +30,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
-	"github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/controllers"
 	"github.com/fluid-cloudnative/fluid/pkg/ctrl/watch"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
+	jindoutils "github.com/fluid-cloudnative/fluid/pkg/utils/jindo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -79,7 +81,7 @@ func (r *RuntimeReconciler) Reconcile(context context.Context, req ctrl.Request)
 		NamespacedName: req.NamespacedName,
 		Recorder:       r.Recorder,
 		Category:       common.AccelerateCategory,
-		RuntimeType:    runtimeType,
+		RuntimeType:    common.JindoRuntime,
 		Client:         r.Client,
 		FinalizerName:  runtimeResourceFinalizerName,
 	}
@@ -98,16 +100,17 @@ func (r *RuntimeReconciler) Reconcile(context context.Context, req ctrl.Request)
 		}
 	}
 	ctx.Runtime = runtime
+	ctx.EngineImpl = ddc.InferEngineImpl(runtime.Status, jindoutils.GetDefaultEngineImpl())
 	ctx.Log.V(1).Info("process the runtime", "runtime", ctx.Runtime)
 
 	// reconcile the implement
 	return r.ReconcileInternal(ctx)
 }
 
-//SetupWithManager setups the manager with RuntimeReconciler
+// SetupWithManager setups the manager with RuntimeReconciler
 func (r *RuntimeReconciler) SetupWithManager(mgr ctrl.Manager, options controller.Options, eventDriven bool) (err error) {
 	if eventDriven {
-		err = watch.SetupWatcherWithReconciler(mgr, options, r)
+		err = watch.SetupWatcherForReconciler(mgr, options, r)
 	} else {
 		err = ctrl.NewControllerManagedBy(mgr).
 			WithOptions(options).
@@ -124,7 +127,7 @@ func (r *RuntimeReconciler) ControllerName() string {
 func (r *RuntimeReconciler) ManagedResource() client.Object {
 	return &datav1alpha1.JindoRuntime{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.JindoRuntimeKind,
+			Kind:       datav1alpha1.JindoRuntimeKind,
 			APIVersion: datav1alpha1.GroupVersion.Group + "/" + datav1alpha1.GroupVersion.Version,
 		},
 	}

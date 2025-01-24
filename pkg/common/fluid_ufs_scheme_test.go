@@ -1,4 +1,5 @@
 /*
+Copyright 2021 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -73,6 +74,29 @@ func TestIsFluidWebScheme(t *testing.T) {
 
 	for k, item := range testCases {
 		got := IsFluidWebScheme(item.endpoint)
+		if got != item.want {
+			t.Errorf("%s check failure, got:%t,want:%t", k, got, item.want)
+		}
+	}
+}
+
+func TestIsFluidRefScheme(t *testing.T) {
+	testCases := map[string]struct {
+		endpoint string
+		want     bool
+	}{
+		"test fluid native scheme case 1": {
+			endpoint: "dataset://mnt/fluid/data",
+			want:     true,
+		},
+		"test fluid native scheme case 2": {
+			endpoint: "local://mnt/fluid/data",
+			want:     false,
+		},
+	}
+
+	for k, item := range testCases {
+		got := IsFluidRefSchema(item.endpoint)
 		if got != item.want {
 			t.Errorf("%s check failure, got:%t,want:%t", k, got, item.want)
 		}

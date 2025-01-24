@@ -4,9 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	. "github.com/agiledragon/gomonkey"
+	. "github.com/agiledragon/gomonkey/v2"
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
-	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	. "github.com/smartystreets/goconvey/convey"
@@ -14,17 +13,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	utilpointer "k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 func TestJuiceFSEngine_CheckAndUpdateRuntimeStatus(t *testing.T) {
 	Convey("Test CheckAndUpdateRuntimeStatus ", t, func() {
 		Convey("CheckAndUpdateRuntimeStatus success", func() {
-			runtimeInfo, err := base.BuildRuntimeInfo("juicefs", "fluid", "juicefs", datav1alpha1.TieredStore{})
-			if err != nil {
-				t.Errorf("fail to create the runtimeInfo with error %v", err)
-			}
-			runtimeInfo.SetupFuseDeployMode(false, nil)
 			var engine *JuiceFSEngine
 			patch1 := ApplyMethod(reflect.TypeOf(engine), "GetRunningPodsOfDaemonset",
 				func(_ *JuiceFSEngine, dsName string, namespace string) ([]corev1.Pod, error) {
@@ -33,10 +27,16 @@ func TestJuiceFSEngine_CheckAndUpdateRuntimeStatus(t *testing.T) {
 				})
 			defer patch1.Reset()
 			patch2 := ApplyMethod(reflect.TypeOf(engine), "GetPodMetrics",
-				func(_ *JuiceFSEngine, podName string) (string, error) {
+				func(_ *JuiceFSEngine, podName, containerName string) (string, error) {
 					return mockJuiceFSMetric(), nil
 				})
 			defer patch2.Reset()
+			patch3 := ApplyMethod(reflect.TypeOf(engine), "GetRunningPodsOfStatefulSet",
+				func(_ *JuiceFSEngine, stsName string, namespace string) ([]corev1.Pod, error) {
+					r := mockRunningPodsOfStatefulSet()
+					return r, nil
+				})
+			defer patch3.Reset()
 
 			var workerInputs = []appsv1.StatefulSet{
 				{
@@ -45,7 +45,7 @@ func TestJuiceFSEngine_CheckAndUpdateRuntimeStatus(t *testing.T) {
 						Namespace: "fluid",
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: utilpointer.Int32Ptr(1),
+						Replicas: ptr.To[int32](1),
 					},
 					Status: appsv1.StatefulSetStatus{
 						Replicas:      1,
@@ -58,7 +58,7 @@ func TestJuiceFSEngine_CheckAndUpdateRuntimeStatus(t *testing.T) {
 						Namespace: "fluid",
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: utilpointer.Int32Ptr(1),
+						Replicas: ptr.To[int32](1),
 					},
 					Status: appsv1.StatefulSetStatus{
 						Replicas:      2,
@@ -71,7 +71,7 @@ func TestJuiceFSEngine_CheckAndUpdateRuntimeStatus(t *testing.T) {
 						Namespace: "fluid",
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: utilpointer.Int32Ptr(1),
+						Replicas: ptr.To[int32](1),
 					},
 				},
 			}

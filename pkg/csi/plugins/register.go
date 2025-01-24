@@ -18,12 +18,18 @@ package plugins
 
 import (
 	"github.com/fluid-cloudnative/fluid/pkg/csi/config"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/kubelet"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // Register initializes the csi driver and registers it to the controller manager.
-func Register(mgr manager.Manager, cfg config.Config) error {
-	csiDriver := NewDriver(cfg.NodeId, cfg.Endpoint, mgr.GetClient(), mgr.GetAPIReader())
+func Register(mgr manager.Manager, ctx config.RunningContext) error {
+	client, err := kubelet.InitNodeAuthorizedClient(ctx.KubeletConfigPath)
+	if err != nil {
+		return err
+	}
+
+	csiDriver := NewDriver(ctx.NodeId, ctx.Endpoint, mgr.GetClient(), mgr.GetAPIReader(), client, ctx.VolumeLocks)
 
 	if err := mgr.Add(csiDriver); err != nil {
 		return err

@@ -1,19 +1,37 @@
+/*
+Copyright 2022 The Fluid Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package jindo
 
 import (
 	"fmt"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base/portallocator"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/docker"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/transfromer"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/transformer"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -22,6 +40,7 @@ func (e *JindoEngine) transform(runtime *datav1alpha1.JindoRuntime) (value *Jind
 		err = fmt.Errorf("the jindoRuntime is null")
 		return
 	}
+	defer utils.TimeTrack(time.Now(), "JindoRuntime.Transform", "name", runtime.Name)
 
 	if len(runtime.Spec.TieredStore.Levels) == 0 {
 		err = fmt.Errorf("the TieredStore is null")
@@ -34,8 +53,8 @@ func (e *JindoEngine) transform(runtime *datav1alpha1.JindoRuntime) (value *Jind
 	}
 
 	var cachePaths []string // /mnt/disk1/bigboot or /mnt/disk1/bigboot,/mnt/disk2/bigboot
-	stroagePath := runtime.Spec.TieredStore.Levels[0].Path
-	originPath := strings.Split(stroagePath, ",")
+	storagePath := runtime.Spec.TieredStore.Levels[0].Path
+	originPath := strings.Split(storagePath, ",")
 	for _, value := range originPath {
 		cachePaths = append(cachePaths, strings.TrimRight(value, "/")+"/"+
 			e.namespace+"/"+e.name+"/bigboot")
@@ -68,17 +87,17 @@ func (e *JindoEngine) transform(runtime *datav1alpha1.JindoRuntime) (value *Jind
 	jindoFuseImage, fuseTag := e.parseFuseImage()
 
 	value = &Jindo{
-		Image:           jindoSmartdataImage,
-		ImageTag:        smartdataTag,
-		ImagePullPolicy: "Always",
-		FuseImage:       jindoFuseImage,
-		FuseImageTag:    fuseTag,
-		User:            0,
-		Group:           0,
-		FsGroup:         0,
-		UseHostNetwork:  true,
-		UseHostPID:      true,
-		Properties:      e.transformPriority(metaPath),
+		Image:            jindoSmartdataImage,
+		ImageTag:         smartdataTag,
+		ImagePullPolicy:  "Always",
+		ImagePullSecrets: runtime.Spec.ImagePullSecrets,
+		FuseImage:        jindoFuseImage,
+		FuseImageTag:     fuseTag,
+		User:             0,
+		Group:            0,
+		FsGroup:          0,
+		UseHostNetwork:   true,
+		Properties:       e.transformPriority(metaPath),
 		Master: Master{
 			ReplicaCount: e.transformReplicasCount(runtime),
 			NodeSelector: e.transformMasterSelector(runtime),
@@ -94,8 +113,15 @@ func (e *JindoEngine) transform(runtime *datav1alpha1.JindoRuntime) (value *Jind
 			Master:            e.transformMasterMountPath(metaPath),
 			WorkersAndClients: e.transformWorkerMountPath(originPath),
 		},
-		Owner: transfromer.GenerateOwnerReferenceFromObject(runtime),
+		Owner: transformer.GenerateOwnerReferenceFromObject(runtime),
+		RuntimeIdentity: common.RuntimeIdentity{
+			Namespace: runtime.Namespace,
+			Name:      runtime.Name,
+		},
 	}
+
+	value.OwnerDatasetId = utils.GetDatasetId(e.namespace, e.name, e.runtimeInfo.GetOwnerDatasetUID())
+
 	e.transformNetworkMode(runtime, value)
 	err = e.transformHadoopConfig(runtime, value)
 	if err != nil {
@@ -148,11 +174,15 @@ func (e *JindoEngine) transform(runtime *datav1alpha1.JindoRuntime) (value *Jind
 	e.transformLogConfig(runtime, value)
 	value.Master.DnsServer = dnsServer
 	value.Master.NameSpace = e.namespace
-	value.Fuse.MountPath = JINDO_FUSE_MONNTPATH
+	value.Fuse.MountPath = JindoFuseMountPath
 	return value, err
 }
 
 func (e *JindoEngine) transformMaster(runtime *datav1alpha1.JindoRuntime, metaPath string, value *Jindo, dataset *datav1alpha1.Dataset) (err error) {
+	if len(runtime.Spec.Master.ImagePullSecrets) != 0 {
+		value.Master.ImagePullSecrets = runtime.Spec.Master.ImagePullSecrets
+	}
+
 	properties := map[string]string{
 		//"namespace.meta-dir": "/mnt/disk1/bigboot/server",
 		"namespace.filelet.cache.size":  "100000",
@@ -171,7 +201,21 @@ func (e *JindoEngine) transformMaster(runtime *datav1alpha1.JindoRuntime, metaPa
 
 	jfsNamespace := "jindo"
 	mode := "oss"
-	for _, mount := range dataset.Spec.Mounts {
+	for _, tmpMount := range dataset.Spec.Mounts {
+
+		mount := tmpMount
+		mount.Options = map[string]string{}
+		mount.EncryptOptions = []datav1alpha1.EncryptOption{}
+
+		for key, value := range dataset.Spec.SharedOptions {
+			mount.Options[key] = value
+		}
+		for key, value := range tmpMount.Options {
+			mount.Options[key] = value
+		}
+
+		mount.EncryptOptions = append(mount.EncryptOptions, dataset.Spec.SharedEncryptOptions...)
+		mount.EncryptOptions = append(mount.EncryptOptions, tmpMount.EncryptOptions...)
 
 		//jfsNamespace = jfsNamespace + mount.Name + ","
 
@@ -214,9 +258,6 @@ func (e *JindoEngine) transformMaster(runtime *datav1alpha1.JindoRuntime, metaPa
 				break
 			}
 			value := secret.Data[secretKeyRef.Key]
-			if err != nil {
-				e.Log.Info("decode value failed")
-			}
 			if key == "fs."+mode+".accessKeyId" {
 				properties["jfs.namespaces.jindo."+mode+".access.key"] = string(value)
 			}
@@ -247,6 +288,9 @@ func (e *JindoEngine) transformMaster(runtime *datav1alpha1.JindoRuntime, metaPa
 }
 
 func (e *JindoEngine) transformWorker(runtime *datav1alpha1.JindoRuntime, metaPath string, dataPath string, userQuotas string, value *Jindo) (err error) {
+	if len(runtime.Spec.Worker.ImagePullSecrets) != 0 {
+		value.Worker.ImagePullSecrets = runtime.Spec.Worker.ImagePullSecrets
+	}
 
 	properties := map[string]string{}
 	// "storage.rpc.port": "6101",
@@ -362,6 +406,9 @@ func (e *JindoEngine) transformResources(runtime *datav1alpha1.JindoRuntime, val
 }
 
 func (e *JindoEngine) transformFuse(runtime *datav1alpha1.JindoRuntime, value *Jindo) (err error) {
+	if len(runtime.Spec.Fuse.ImagePullSecrets) != 0 {
+		value.Fuse.ImagePullSecrets = runtime.Spec.Fuse.ImagePullSecrets
+	}
 	// default enable data-cache and disable meta-cache
 	properties := map[string]string{
 		"client.oss.retry":                          "5",
@@ -396,6 +443,7 @@ func (e *JindoEngine) transformFuse(runtime *datav1alpha1.JindoRuntime, value *J
 
 	// set critical fuse pod to avoid eviction
 	value.Fuse.CriticalPod = common.CriticalFusePodEnabled()
+	value.Fuse.HostPID = common.HostPIDEnabled(runtime.Annotations)
 
 	return nil
 }
@@ -416,7 +464,7 @@ func (e *JindoEngine) transformFuseNodeSelector(runtime *datav1alpha1.JindoRunti
 	}
 
 	// The label will be added by CSI Plugin when any workload pod is scheduled on the node.
-	value.Fuse.NodeSelector[e.getFuseLabelname()] = "true"
+	value.Fuse.NodeSelector[utils.GetFuseLabelName(runtime.Namespace, runtime.Name, e.runtimeInfo.GetOwnerDatasetUID())] = "true"
 
 	return nil
 }
@@ -434,10 +482,10 @@ func (e *JindoEngine) transformNodeSelector(runtime *datav1alpha1.JindoRuntime) 
 }
 
 func (e *JindoEngine) transformReplicasCount(runtime *datav1alpha1.JindoRuntime) int {
-	if runtime.Spec.Master.Replicas == JINDO_HA_MASTERNUM {
-		return JINDO_HA_MASTERNUM
+	if runtime.Spec.Master.Replicas == JindoHAMasterNum {
+		return JindoHAMasterNum
 	}
-	return JINDO_MASTERNUM_DEFAULT
+	return JindoMasterNumDefault
 }
 
 func (e *JindoEngine) transformMasterSelector(runtime *datav1alpha1.JindoRuntime) map[string]string {
@@ -501,9 +549,9 @@ func (e *JindoEngine) getSmartDataConfigs() (image, tag, dnsServer string) {
 		defaultDnsServer = "1.1.1.1"
 	)
 
-	image = docker.GetImageRepoFromEnv(common.JINDO_SMARTDATA_IMAGE_ENV)
-	tag = docker.GetImageTagFromEnv(common.JINDO_SMARTDATA_IMAGE_ENV)
-	dnsServer = os.Getenv(common.JINDO_DNS_SERVER)
+	image = docker.GetImageRepoFromEnv(common.JindoSmartDataImageEnv)
+	tag = docker.GetImageTagFromEnv(common.JindoSmartDataImageEnv)
+	dnsServer = os.Getenv(common.JindoDnsServer)
 	if len(image) == 0 {
 		image = defaultImage
 	}
@@ -524,8 +572,8 @@ func (e *JindoEngine) parseFuseImage() (image, tag string) {
 		defaultTag   = "3.8.0"
 	)
 
-	image = docker.GetImageRepoFromEnv(common.JINDO_FUSE_IMAGE_ENV)
-	tag = docker.GetImageTagFromEnv(common.JINDO_FUSE_IMAGE_ENV)
+	image = docker.GetImageRepoFromEnv(common.JindoFuseImageEnv)
+	tag = docker.GetImageTagFromEnv(common.JindoFuseImageEnv)
 	if len(image) == 0 {
 		image = defaultImage
 	}
@@ -560,15 +608,15 @@ func (e *JindoEngine) allocatePorts(value *Jindo) error {
 	// usehostnetwork to choose port from port allocator
 	expectedPortNum := 2
 	if !value.UseHostNetwork {
-		value.Master.Port.Rpc = DEFAULT_MASTER_RPC_PORT
-		value.Worker.Port.Rpc = DEFAULT_WORKER_RPC_PORT
-		if value.Master.ReplicaCount == JINDO_HA_MASTERNUM {
-			value.Master.Port.Raft = DEFAULT_RAFT_RPC_PORT
+		value.Master.Port.Rpc = DefaultMasterRpcPort
+		value.Worker.Port.Rpc = DefaultWorkerRpcPort
+		if value.Master.ReplicaCount == JindoHAMasterNum {
+			value.Master.Port.Raft = DefaultRaftRpcPort
 		}
 		return nil
 	}
 
-	if value.Master.ReplicaCount == JINDO_HA_MASTERNUM {
+	if value.Master.ReplicaCount == JindoHAMasterNum {
 		expectedPortNum = 3
 	}
 
@@ -588,7 +636,7 @@ func (e *JindoEngine) allocatePorts(value *Jindo) error {
 	value.Master.Port.Rpc = allocatedPorts[index]
 	index++
 	value.Worker.Port.Rpc = allocatedPorts[index]
-	if value.Master.ReplicaCount == JINDO_HA_MASTERNUM {
+	if value.Master.ReplicaCount == JindoHAMasterNum {
 		index++
 		value.Master.Port.Raft = allocatedPorts[index]
 	}
@@ -606,14 +654,14 @@ func (e *JindoEngine) transformInitPortCheck(value *Jindo) error {
 	value.InitPortCheck.Enabled = true
 
 	// Always use the default init image defined in env
-	value.InitPortCheck.Image, value.InitPortCheck.ImageTag, value.InitPortCheck.ImagePullPolicy = docker.ParseInitImage("", "", "", common.DEFAULT_INIT_IMAGE_ENV)
+	value.InitPortCheck.Image, value.InitPortCheck.ImageTag, value.InitPortCheck.ImagePullPolicy = docker.ParseInitImage("", "", "", common.DefaultInitImageEnv)
 
 	// Inject ports to be checked to a init container which reports the usage status of the ports for easier debugging.
 	// The jindo master container will always start even when some of the ports is in use.
 	var ports []string
 
 	ports = append(ports, strconv.Itoa(value.Master.Port.Rpc))
-	if value.Master.ReplicaCount == JINDO_HA_MASTERNUM {
+	if value.Master.ReplicaCount == JindoHAMasterNum {
 		ports = append(ports, strconv.Itoa(value.Master.Port.Raft))
 	}
 

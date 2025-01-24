@@ -1,13 +1,30 @@
+/*
+Copyright 2021 The Fluid Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package alluxio
 
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	v1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"strings"
 )
 
 // transformHadoopConfig transforms the given value by checking existence of user-specific hadoop configurations
@@ -33,18 +50,18 @@ func (e *AlluxioEngine) transformHadoopConfig(runtime *datav1alpha1.AlluxioRunti
 	var confFiles []string
 	for k := range hadoopConfigMap.Data {
 		switch k {
-		case HADOOP_CONF_HDFS_SITE_FILENAME:
+		case hadoopConfHdfsSiteFilename:
 			value.HadoopConfig.IncludeHdfsSite = true
-			confFiles = append(confFiles, HADOOP_CONF_MOUNT_PATH+"/"+HADOOP_CONF_HDFS_SITE_FILENAME)
-		case HADOOP_CONF_CORE_SITE_FILENAME:
+			confFiles = append(confFiles, hadoopConfMountPath+"/"+hadoopConfHdfsSiteFilename)
+		case hadoopConfCoreSiteFilename:
 			value.HadoopConfig.IncludeCoreSite = true
-			confFiles = append(confFiles, HADOOP_CONF_MOUNT_PATH+"/"+HADOOP_CONF_CORE_SITE_FILENAME)
+			confFiles = append(confFiles, hadoopConfMountPath+"/"+hadoopConfCoreSiteFilename)
 		}
 	}
 
 	// Neither hdfs-site.xml nor core-site.xml is found in the configMap
 	if !value.HadoopConfig.IncludeCoreSite && !value.HadoopConfig.IncludeHdfsSite {
-		err = fmt.Errorf("Neither \"%v\" nor \"%v\" is found in the specified configMap \"%v\" ", HADOOP_CONF_HDFS_SITE_FILENAME, HADOOP_CONF_CORE_SITE_FILENAME, runtime.Spec.HadoopConfig)
+		err = fmt.Errorf("neither \"%v\" nor \"%v\" is found in the specified configMap \"%v\" ", hadoopConfHdfsSiteFilename, hadoopConfCoreSiteFilename, runtime.Spec.HadoopConfig)
 		return err
 	}
 

@@ -46,3 +46,16 @@
 ### 0.8.0
 
 * Add application controller component
+* Add Go gull profile capablities
+* Support setting global image pull secrets
+* Update mutating webhook configuration rules
+* Support configurable pod metadata of runtimes
+* Scale runtime controllers on demand
+
+### 0.9.0
+* Support pass image pull secrets from fluid charts to alluxioruntime controller
+* Fix components rbacs and set Fluid CSI Plugin with node-authorized kube-client
+
+### 1.0.0
+* Fix CSI Plugin loop mount bug
+* Make toleration configurable

@@ -3,7 +3,9 @@ Copyright 2021 The Fluid Authors.
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,7 +26,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func TestBuild(t *testing.T) {
@@ -53,9 +54,7 @@ func TestBuild(t *testing.T) {
 			Master: datav1alpha1.JindoCompTemplateSpec{
 				Replicas: 1,
 			},
-			Fuse: datav1alpha1.JindoFuseSpec{
-				Global: false,
-			},
+			Fuse: datav1alpha1.JindoFuseSpec{},
 		},
 		Status: datav1alpha1.RuntimeStatus{
 			CacheStates: map[common.CacheStateName]string{
@@ -80,7 +79,7 @@ func TestBuild(t *testing.T) {
 			Namespace: "fluid",
 		},
 		Client:      client,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 		RuntimeType: common.JindoRuntime,
 		Runtime:     &runtime,
 	}

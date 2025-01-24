@@ -16,40 +16,40 @@ limitations under the License.
 package juicefs
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
-	. "github.com/agiledragon/gomonkey"
+	. "github.com/agiledragon/gomonkey/v2"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/apps/v1"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-func mockExecCommandInContainerForTotalStorageBytes() (stdout string, stderr string, err error) {
-	r := `6706560319    /tmp`
-	return r, "", nil
-}
 
 func mockExecCommandInContainerForTotalFileNums() (stdout string, stderr string, err error) {
 	r := `1331167`
 	return r, "", nil
 }
 
+func mockExecCommandInContainerForUsedStorageBytes() (stdout string, stderr string, err error) {
+	r := `JuiceFS:test 207300683100160  41460043776 207259223056384   1% /juicefs/juicefs/test/juicefs-fuse`
+	return r, "", nil
+}
+
 func TestTotalStorageBytes(t *testing.T) {
-	daemonSet := &appsv1.DaemonSet{
+	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-fuse",
-			Namespace: "fluid",
+			Name:      "test-worker",
+			Namespace: "juicefs",
 		},
-		Spec: appsv1.DaemonSetSpec{
+		Spec: appsv1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"a": "b"},
 			},
@@ -57,8 +57,8 @@ func TestTotalStorageBytes(t *testing.T) {
 	}
 	var pod = &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-fuse-xxx",
-			Namespace: "fluid",
+			Name:      "test-work-0",
+			Namespace: "juicefs",
 			Labels:    map[string]string{"a": "b"},
 		},
 		Status: corev1.PodStatus{
@@ -73,9 +73,9 @@ func TestTotalStorageBytes(t *testing.T) {
 		Items: []corev1.Pod{*pod},
 	}
 	runtimeObjs := []runtime.Object{}
-	runtimeObjs = append(runtimeObjs, daemonSet, pod)
+	runtimeObjs = append(runtimeObjs, statefulSet, pod)
 	scheme := runtime.NewScheme()
-	scheme.AddKnownTypes(v1.SchemeGroupVersion, daemonSet)
+	scheme.AddKnownTypes(appsv1.SchemeGroupVersion, statefulSet)
 	scheme.AddKnownTypes(corev1.SchemeGroupVersion, pod)
 	scheme.AddKnownTypes(corev1.SchemeGroupVersion, podList)
 	fakeClient := fake.NewFakeClientWithScheme(scheme, runtimeObjs...)
@@ -94,15 +94,15 @@ func TestTotalStorageBytes(t *testing.T) {
 			name: "test",
 			fields: fields{
 				name:      "test",
-				namespace: "fluid",
+				namespace: "juicefs",
 				runtime: &datav1alpha1.JuiceFSRuntime{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
-						Namespace: "fluid",
+						Namespace: "juicefs",
 					},
 				},
 			},
-			wantValue: 6706560319,
+			wantValue: 41460043776,
 			wantErr:   false,
 		},
 	}
@@ -113,10 +113,10 @@ func TestTotalStorageBytes(t *testing.T) {
 				name:      tt.fields.name,
 				namespace: tt.fields.namespace,
 				Client:    fakeClient,
-				Log:       log.NullLogger{},
+				Log:       fake.NullLogger(),
 			}
-			patch1 := ApplyFunc(kubeclient.ExecCommandInContainer, func(podName string, containerName string, namespace string, cmd []string) (string, string, error) {
-				stdout, stderr, err := mockExecCommandInContainerForTotalStorageBytes()
+			patch1 := ApplyFunc(kubeclient.ExecCommandInContainerWithFullOutput, func(ctx context.Context, podName string, containerName string, namespace string, cmd []string) (string, string, error) {
+				stdout, stderr, err := mockExecCommandInContainerForUsedStorageBytes()
 				return stdout, stderr, err
 			})
 			defer patch1.Reset()
@@ -133,12 +133,12 @@ func TestTotalStorageBytes(t *testing.T) {
 }
 
 func TestTotalFileNums(t *testing.T) {
-	daemonSet := &appsv1.DaemonSet{
+	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-fuse",
+			Name:      "test-worker",
 			Namespace: "fluid",
 		},
-		Spec: appsv1.DaemonSetSpec{
+		Spec: appsv1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"a": "b"},
 			},
@@ -146,7 +146,7 @@ func TestTotalFileNums(t *testing.T) {
 	}
 	var pod = &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-fuse-xxx",
+			Name:      "test-worker-0",
 			Namespace: "fluid",
 			Labels:    map[string]string{"a": "b"},
 		},
@@ -162,9 +162,9 @@ func TestTotalFileNums(t *testing.T) {
 		Items: []corev1.Pod{*pod},
 	}
 	runtimeObjs := []runtime.Object{}
-	runtimeObjs = append(runtimeObjs, daemonSet, pod)
+	runtimeObjs = append(runtimeObjs, statefulSet, pod)
 	scheme := runtime.NewScheme()
-	scheme.AddKnownTypes(v1.SchemeGroupVersion, daemonSet)
+	scheme.AddKnownTypes(appsv1.SchemeGroupVersion, statefulSet)
 	scheme.AddKnownTypes(corev1.SchemeGroupVersion, pod)
 	scheme.AddKnownTypes(corev1.SchemeGroupVersion, podList)
 	fakeClient := fake.NewFakeClientWithScheme(scheme, runtimeObjs...)
@@ -200,10 +200,10 @@ func TestTotalFileNums(t *testing.T) {
 				runtime:   tt.fields.runtime,
 				name:      tt.fields.name,
 				namespace: tt.fields.namespace,
-				Log:       log.NullLogger{},
+				Log:       fake.NullLogger(),
 				Client:    fakeClient,
 			}
-			patch1 := ApplyFunc(kubeclient.ExecCommandInContainer, func(podName string, containerName string, namespace string, cmd []string) (string, string, error) {
+			patch1 := ApplyFunc(kubeclient.ExecCommandInContainerWithFullOutput, func(ctx context.Context, podName string, containerName string, namespace string, cmd []string) (string, string, error) {
 				stdout, stderr, err := mockExecCommandInContainerForTotalFileNums()
 				return stdout, stderr, err
 			})
@@ -363,30 +363,93 @@ func TestJuiceFSEngine_UpdateOnUFSChange(t *testing.T) {
 }
 
 func TestJuiceFSEngine_UsedStorageBytes(t *testing.T) {
-	type fields struct{}
+	statefulset := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-worker",
+			Namespace: "juicefs",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"a": "b"},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:      1,
+			ReadyReplicas: 1,
+		},
+	}
+
+	var pod = &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-worker-0",
+			Namespace: "juicefs",
+			Labels:    map[string]string{"a": "b"},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{
+				Type:   corev1.PodReady,
+				Status: corev1.ConditionTrue,
+			}},
+		},
+	}
+	podList := &corev1.PodList{
+		Items: []corev1.Pod{*pod},
+	}
+	runtimeObjs := []runtime.Object{}
+	runtimeObjs = append(runtimeObjs, statefulset, pod)
+	scheme := runtime.NewScheme()
+	scheme.AddKnownTypes(appsv1.SchemeGroupVersion, statefulset)
+	scheme.AddKnownTypes(corev1.SchemeGroupVersion, pod)
+	scheme.AddKnownTypes(corev1.SchemeGroupVersion, podList)
+	fakeClient := fake.NewFakeClientWithScheme(scheme, runtimeObjs...)
+	type fields struct {
+		runtime   *datav1alpha1.JuiceFSRuntime
+		name      string
+		namespace string
+	}
 	tests := []struct {
-		name    string
-		fields  fields
-		want    int64
-		wantErr bool
+		name      string
+		fields    fields
+		wantValue int64
+		wantErr   bool
 	}{
 		{
-			name:    "test",
-			fields:  fields{},
-			want:    0,
-			wantErr: false,
+			name: "test",
+			fields: fields{
+				name:      "test",
+				namespace: "juicefs",
+				runtime: &datav1alpha1.JuiceFSRuntime{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "spark",
+					},
+				},
+			},
+			wantValue: 41460043776,
+			wantErr:   false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			j := JuiceFSEngine{}
-			got, err := j.UsedStorageBytes()
+			j := JuiceFSEngine{
+				runtime:   tt.fields.runtime,
+				name:      tt.fields.name,
+				namespace: tt.fields.namespace,
+				Log:       fake.NullLogger(),
+				Client:    fakeClient,
+			}
+			patch1 := ApplyFunc(kubeclient.ExecCommandInContainerWithFullOutput, func(ctx context.Context, podName string, containerName string, namespace string, cmd []string) (string, string, error) {
+				stdout, stderr, err := mockExecCommandInContainerForUsedStorageBytes()
+				return stdout, stderr, err
+			})
+			defer patch1.Reset()
+			gotValue, err := j.UsedStorageBytes()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("UsedStorageBytes() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("JuiceFSEngine.UsedStorageBytes() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if got != tt.want {
-				t.Errorf("UsedStorageBytes() got = %v, want %v", got, tt.want)
+			if gotValue != tt.wantValue {
+				t.Errorf("JuiceFSEngine.UsedStorageBytes() = %v, want %v", gotValue, tt.wantValue)
 			}
 		})
 	}

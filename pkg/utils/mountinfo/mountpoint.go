@@ -18,10 +18,11 @@ package mountinfo
 
 import (
 	"fmt"
-	"github.com/fluid-cloudnative/fluid/pkg/utils"
-	"github.com/golang/glog"
 	"path"
 	"strings"
+
+	"github.com/fluid-cloudnative/fluid/pkg/utils"
+	"github.com/golang/glog"
 )
 
 type MountPoint struct {
@@ -111,7 +112,8 @@ func getBrokenBindMounts(globalMountByName map[string]*Mount, bindMountByName ma
 			continue
 		}
 		for _, bindMount := range bindMounts {
-			if *bindMount.PeerGroup != *globalMount.PeerGroup {
+			// In case of not sharing same peer group in mount info, meaning it a broken mount point
+			if len(utils.IntersectIntegerSets(bindMount.PeerGroups, globalMount.PeerGroups)) == 0 {
 				brokenMounts = append(brokenMounts, MountPoint{
 					SourcePath:            path.Join(globalMount.MountPath, bindMount.Subtree),
 					MountPath:             bindMount.MountPath,

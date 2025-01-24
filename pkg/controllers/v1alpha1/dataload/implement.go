@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Fluid Authors.
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,404 +13,152 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package dataload
 
 import (
 	"context"
-	"github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"fmt"
+	"github.com/go-logr/logr"
+	"k8s.io/client-go/tools/record"
+	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/fluid-cloudnative/fluid/pkg/dataoperation"
+
+	v1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	cdataload "github.com/fluid-cloudnative/fluid/pkg/dataload"
-	"github.com/fluid-cloudnative/fluid/pkg/ddc"
-	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/helm"
-	"github.com/go-logr/logr"
-	batchv1 "k8s.io/api/batch/v1"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/tools/record"
-	"k8s.io/client-go/util/retry"
-	"reflect"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sync"
-	"time"
 )
 
-// DataLoadReconcilerImplement implements the actual reconciliation logic of DataLoadReconciler
-type DataLoadReconcilerImplement struct {
+type dataLoadOperation struct {
 	client.Client
 	Log      logr.Logger
 	Recorder record.EventRecorder
+
+	dataLoad *datav1alpha1.DataLoad
 }
 
-// NewDataLoadReconcilerImplement returns a DataLoadReconcilerImplement
-func NewDataLoadReconcilerImplement(client client.Client, log logr.Logger, recorder record.EventRecorder) *DataLoadReconcilerImplement {
-	r := &DataLoadReconcilerImplement{
-		Client:   client,
-		Log:      log,
-		Recorder: recorder,
-	}
-	return r
+var _ dataoperation.OperationInterface = &dataLoadOperation{}
+
+func (r *dataLoadOperation) GetOperationObject() client.Object {
+	return r.dataLoad
 }
 
-// ReconcileDataLoadDeletion reconciles the deletion of the DataLoad
-func (r *DataLoadReconcilerImplement) ReconcileDataLoadDeletion(ctx cruntime.ReconcileRequestContext, targetDataload datav1alpha1.DataLoad, engines map[string]base.Engine, mutex *sync.Mutex) (ctrl.Result, error) {
-	log := ctx.Log.WithName("ReconcileDataLoadDeletion")
-
-	// 1. Delete release if exists
-	releaseName := utils.GetDataLoadReleaseName(targetDataload.Name)
-	err := helm.DeleteReleaseIfExists(releaseName, targetDataload.Namespace)
-	if err != nil {
-		log.Error(err, "can't delete release", "releaseName", releaseName)
-		return utils.RequeueIfError(err)
-	}
-
-	// 2. Release lock on target dataset if necessary
-	err = r.releaseLockOnTargetDataset(ctx, targetDataload, log)
-	if err != nil {
-		log.Error(err, "can't release lock on target dataset", "targetDataset", targetDataload.Spec.Dataset)
-		return utils.RequeueIfError(err)
-	}
-
-	// 3. delete engine
-	mutex.Lock()
-	defer mutex.Unlock()
-	id := ddc.GenerateEngineID(ctx.NamespacedName)
-	delete(engines, id)
-
-	// 4. remove finalizer
-	if utils.HasDeletionTimestamp(targetDataload.ObjectMeta) {
-		targetDataload.ObjectMeta.Finalizers = utils.RemoveString(targetDataload.ObjectMeta.Finalizers, cdataload.DATALOAD_FINALIZER)
-		if err := r.Update(ctx, &targetDataload); err != nil {
-			log.Error(err, "failed to remove finalizer")
-			return utils.RequeueIfError(err)
-		}
-		log.Info("Finalizer is removed")
-	}
-	return utils.NoRequeue()
+func (r *dataLoadOperation) HasPrecedingOperation() bool {
+	return r.dataLoad.Spec.RunAfter != nil
 }
 
-// ReconcileDataLoad reconciles the DataLoad according to its phase status
-func (r *DataLoadReconcilerImplement) ReconcileDataLoad(ctx cruntime.ReconcileRequestContext, targetDataload datav1alpha1.DataLoad, engine base.Engine) (ctrl.Result, error) {
-	log := ctx.Log.WithName("ReconcileDataLoad")
-	log.V(1).Info("process the cdataload", "cdataload", targetDataload)
-
-	// DataLoad's phase transition: None -> Pending -> Executing -> Loaded or Failed
-	switch targetDataload.Status.Phase {
-	case common.PhaseNone:
-		return r.reconcileNoneDataLoad(ctx, targetDataload)
-	case common.PhasePending:
-		return r.reconcilePendingDataLoad(ctx, targetDataload, engine)
-	case common.PhaseExecuting:
-		return r.reconcileExecutingDataLoad(ctx, targetDataload, engine)
-	case common.PhaseComplete:
-		return r.reconcileLoadedDataLoad(ctx, targetDataload)
-	case common.PhaseFailed:
-		return r.reconcileFailedDataLoad(ctx, targetDataload)
-	default:
-		log.Info("Unknown DataLoad phase, won't reconcile it")
+func (r *dataLoadOperation) GetPossibleTargetDatasetNamespacedNames() []types.NamespacedName {
+	return []types.NamespacedName{
+		{Namespace: r.dataLoad.Spec.Dataset.Namespace, Name: r.dataLoad.Spec.Dataset.Name},
 	}
-	return utils.NoRequeue()
 }
 
-// reconcileNoneDataLoad reconciles DataLoads that are in `DataLoadPhaseNone` phase
-func (r *DataLoadReconcilerImplement) reconcileNoneDataLoad(ctx cruntime.ReconcileRequestContext, targetDataload datav1alpha1.DataLoad) (ctrl.Result, error) {
-	log := ctx.Log.WithName("reconcileNoneDataLoad")
-	dataloadToUpdate := targetDataload.DeepCopy()
-	dataloadToUpdate.Status.Phase = common.PhasePending
-	if len(dataloadToUpdate.Status.Conditions) == 0 {
-		dataloadToUpdate.Status.Conditions = []v1alpha1.Condition{}
-	}
-	dataloadToUpdate.Status.Duration = "Unfinished"
-	if err := r.Status().Update(context.TODO(), dataloadToUpdate); err != nil {
-		log.Error(err, "failed to update the cdataload")
-		return utils.RequeueIfError(err)
-	}
-	log.V(1).Info("Update phase of the cdataload to Pending successfully")
-	return utils.RequeueImmediately()
+func (r *dataLoadOperation) GetTargetDataset() (*datav1alpha1.Dataset, error) {
+	return utils.GetDataset(r.Client, r.dataLoad.Spec.Dataset.Name, r.dataLoad.Spec.Dataset.Namespace)
 }
 
-// reconcilePendingDataLoad reconciles DataLoads that are in `DataLoadPhasePending` phase
-func (r *DataLoadReconcilerImplement) reconcilePendingDataLoad(ctx cruntime.ReconcileRequestContext,
-	targetDataload datav1alpha1.DataLoad,
-	engine base.Engine) (ctrl.Result, error) {
-	log := ctx.Log.WithName("reconcilePendingDataLoad")
+func (r *dataLoadOperation) GetReleaseNameSpacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: r.dataLoad.GetNamespace(),
+		Name:      utils.GetDataLoadReleaseName(r.dataLoad.GetName()),
+	}
+}
 
-	// 1. Check dataload namespace and dataset namespace need to be same
-	if targetDataload.Namespace != targetDataload.Spec.Dataset.Namespace {
-		r.Recorder.Eventf(&targetDataload,
+func (r *dataLoadOperation) GetChartsDirectory() string {
+	return utils.GetChartsDirectory() + "/" + cdataload.DataloadChart
+}
+
+func (r *dataLoadOperation) GetOperationType() dataoperation.OperationType {
+	return dataoperation.DataLoadType
+}
+
+func (r *dataLoadOperation) UpdateOperationApiStatus(opStatus *datav1alpha1.OperationStatus) error {
+	var dataLoadCpy = r.dataLoad.DeepCopy()
+	dataLoadCpy.Status = *opStatus.DeepCopy()
+	return r.Status().Update(context.Background(), dataLoadCpy)
+}
+
+func (r *dataLoadOperation) Validate(ctx cruntime.ReconcileRequestContext) ([]datav1alpha1.Condition, error) {
+	dataLoad := r.dataLoad
+
+	// 1. Check dataLoad namespace and dataset namespace need to be same
+	if dataLoad.Namespace != dataLoad.Spec.Dataset.Namespace {
+		r.Recorder.Eventf(dataLoad,
 			v1.EventTypeWarning,
 			common.TargetDatasetNamespaceNotSame,
-			"Dataload(%s) namespace is not same as dataset",
-			targetDataload.Name)
+			"dataLoad(%s) namespace is not same as dataset",
+			dataLoad.Name)
+		err := fmt.Errorf("dataLoad(%s) namespace is not same as dataset", dataLoad.Name)
 
-		// Update DataLoad's phase to Failed, and no requeue
-		err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-			dataload, err := utils.GetDataLoad(r.Client, targetDataload.Name, targetDataload.Namespace)
-			if err != nil {
-				return err
-			}
-			dataloadToUpdate := dataload.DeepCopy()
-			dataloadToUpdate.Status.Phase = common.PhaseFailed
-
-			if !reflect.DeepEqual(dataloadToUpdate.Status, dataload.Status) {
-				if err := r.Status().Update(ctx, dataloadToUpdate); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			log.Error(err, "can't update dataload's phase status to Failed")
-			return utils.RequeueIfError(err)
-		}
-		return utils.NoRequeue()
+		return []datav1alpha1.Condition{
+			{
+				Type:               common.Failed,
+				Status:             v1.ConditionTrue,
+				Reason:             common.TargetDatasetNamespaceNotSame,
+				Message:            "dataLoad namespace is not same as dataset",
+				LastProbeTime:      metav1.NewTime(time.Now()),
+				LastTransitionTime: metav1.NewTime(time.Now()),
+			},
+		}, err
 	}
-
-	// 2. Check existence of the target dataset
-	targetDataset, err := utils.GetDataset(r.Client, targetDataload.Spec.Dataset.Name, targetDataload.Spec.Dataset.Namespace)
-	if err != nil {
-		if utils.IgnoreNotFound(err) == nil {
-			log.Info("Target dataset not found", "targetDataset", targetDataload.Spec.Dataset)
-			r.Recorder.Eventf(&targetDataload,
-				v1.EventTypeWarning,
-				common.TargetDatasetNotFound,
-				"Target dataset(namespace: %s, name: %s) not found",
-				targetDataload.Spec.Dataset.Namespace, targetDataload.Spec.Dataset.Name)
-		} else {
-			log.Error(err, "can't get target dataset", "targetDataset", targetDataload.Spec.Dataset)
-		}
-		return utils.RequeueAfterInterval(20 * time.Second)
-	}
-	log.V(1).Info("get target dataset", "targetDataset", targetDataset)
-
-	// 3. Check if there's any Executing DataLoad jobs(conflict DataLoad)
-	conflictDataLoadRef := targetDataset.Status.DataLoadRef
-	myDataLoadRef := utils.GetDataLoadRef(targetDataload.Name, targetDataload.Namespace)
-	if len(conflictDataLoadRef) != 0 && conflictDataLoadRef != myDataLoadRef {
-		log.V(1).Info("Found other DataLoads that is in Executing phase, will backoff", "other DataLoad", conflictDataLoadRef)
-		r.Recorder.Eventf(&targetDataload,
-			v1.EventTypeNormal,
-			common.DataLoadCollision,
-			"Found other Dataload(%s) that is in Executing phase, will backoff",
-			conflictDataLoadRef)
-		return utils.RequeueAfterInterval(20 * time.Second)
-	}
-
-	// 4. Check if the bounded runtime is ready
-	ready := engine.CheckRuntimeReady()
-	if !ready {
-		log.V(1).Info("Bounded accelerate runtime not ready", "targetDataset", targetDataset)
-		r.Recorder.Eventf(&targetDataload,
-			v1.EventTypeNormal,
-			common.RuntimeNotReady,
-			"Bounded accelerate runtime not ready")
-		return utils.RequeueAfterInterval(20 * time.Second)
-	}
-
-	// 5. Check existence of the targetPath in alluxio
-	notExisted, err := engine.CheckExistenceOfPath(targetDataload)
-	if err != nil {
-		return utils.RequeueAfterInterval(20 * time.Second)
-	}
-	if notExisted {
-		r.Recorder.Eventf(&targetDataload,
-			v1.EventTypeWarning,
-			common.TargetDatasetPathNotFound,
-			"Dataload target dataset's path is not existed")
-
-		// Update DataLoad's phase to Failed, and no requeue
-		err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-			dataload, err := utils.GetDataLoad(r.Client, targetDataload.Name, targetDataload.Namespace)
-			if err != nil {
-				return err
-			}
-			dataloadToUpdate := dataload.DeepCopy()
-			dataloadToUpdate.Status.Phase = common.PhaseFailed
-
-			if !reflect.DeepEqual(dataloadToUpdate.Status, dataload.Status) {
-				if err := r.Status().Update(ctx, dataloadToUpdate); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			log.Error(err, "can't update dataload's phase status to Failed")
-			return utils.RequeueIfError(err)
-		}
-		return utils.NoRequeue()
-	}
-
-	// 6. lock the target dataset. Make sure only one DataLoad can win the lock and
-	// the losers have to requeue and go through the whole reconciliation loop.
-	log.Info("No conflicts detected, try to lock the target dataset")
-	datasetToUpdate := targetDataset.DeepCopy()
-	datasetToUpdate.Status.DataLoadRef = myDataLoadRef
-	if !reflect.DeepEqual(targetDataset.Status, datasetToUpdate.Status) {
-		if err = r.Client.Status().Update(context.TODO(), datasetToUpdate); err != nil {
-			log.V(1).Info("fail to get target dataset's lock, will requeue")
-			//todo(xuzhihao): random backoff
-			return utils.RequeueAfterInterval(20 * time.Second)
-		}
-	}
-
-	// 7. update phase to Executing
-	// We offload the helm install logic to `reconcileExecutingDataLoad` to
-	// avoid such a case that status.phase change successfully first but helm install failed,
-	// where the DataLoad job will never start and all other DataLoads will be blocked forever.
-	log.Info("Get lock on target dataset, try to update phase")
-	dataLoadToUpdate := targetDataload.DeepCopy()
-	dataLoadToUpdate.Status.Phase = common.PhaseExecuting
-	if err = r.Client.Status().Update(context.TODO(), dataLoadToUpdate); err != nil {
-		log.Error(err, "failed to update cdataload's status to Executing, will retry")
-		return utils.RequeueIfError(err)
-	}
-	log.V(1).Info("update cdataload's status to Executing successfully")
-	return utils.RequeueImmediately()
+	return nil, nil
 }
 
-// reconcileExecutingDataLoad reconciles DataLoads that are in `Executing` phase
-func (r *DataLoadReconcilerImplement) reconcileExecutingDataLoad(ctx cruntime.ReconcileRequestContext,
-	targetDataload datav1alpha1.DataLoad,
-	engine base.Engine) (ctrl.Result, error) {
-	log := ctx.Log.WithName("reconcileExecutingDataLoad")
-
-	// 1. Install the helm chart if not exists and requeue
-	err := engine.LoadData(ctx, targetDataload)
-	if err != nil {
-		log.Error(err, "engine loaddata failed")
-		return utils.RequeueIfError(err)
-	}
-
-	// 2. Check running status of the DataLoad job
-	releaseName := utils.GetDataLoadReleaseName(targetDataload.Name)
-	jobName := utils.GetDataLoadJobName(releaseName)
-	log.V(1).Info("DataLoad chart already existed, check its running status")
-	job, err := utils.GetDataLoadJob(r.Client, jobName, ctx.Namespace)
-	if err != nil {
-		// helm release found but job missing, delete the helm release and requeue
-		if utils.IgnoreNotFound(err) == nil {
-			log.Info("Related Job missing, will delete helm chart and retry", "namespace", ctx.Namespace, "jobName", jobName)
-			if err = helm.DeleteReleaseIfExists(releaseName, ctx.Namespace); err != nil {
-				log.Error(err, "can't delete dataload release", "namespace", ctx.Namespace, "releaseName", releaseName)
-				return utils.RequeueIfError(err)
-			}
-			return utils.RequeueAfterInterval(20 * time.Second)
-		}
-		// other error
-		log.Error(err, "can't get dataload job", "namespace", ctx.Namespace, "jobName", jobName)
-		return utils.RequeueIfError(err)
-	}
-
-	if len(job.Status.Conditions) != 0 {
-		if job.Status.Conditions[0].Type == batchv1.JobFailed ||
-			job.Status.Conditions[0].Type == batchv1.JobComplete {
-			// job either failed or complete, update DataLoad's phase status
-			err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-				dataload, err := utils.GetDataLoad(r.Client, targetDataload.Name, targetDataload.Namespace)
-				if err != nil {
-					return err
-				}
-				dataloadToUpdate := dataload.DeepCopy()
-				jobCondition := job.Status.Conditions[0]
-				dataloadToUpdate.Status.Conditions = []v1alpha1.Condition{
-					{
-						Type:               common.ConditionType(jobCondition.Type),
-						Status:             jobCondition.Status,
-						Reason:             jobCondition.Reason,
-						Message:            jobCondition.Message,
-						LastProbeTime:      jobCondition.LastProbeTime,
-						LastTransitionTime: jobCondition.LastTransitionTime,
-					},
-				}
-				if jobCondition.Type == batchv1.JobFailed {
-					dataloadToUpdate.Status.Phase = common.PhaseFailed
-				} else {
-					dataloadToUpdate.Status.Phase = common.PhaseComplete
-				}
-				dataloadToUpdate.Status.Duration = utils.CalculateDuration(dataloadToUpdate.CreationTimestamp.Time, jobCondition.LastTransitionTime.Time)
-
-				if !reflect.DeepEqual(dataloadToUpdate.Status, dataload.Status) {
-					if err := r.Status().Update(ctx, dataloadToUpdate); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-			if err != nil {
-				log.Error(err, "can't update dataload's phase status to Failed")
-				return utils.RequeueIfError(err)
-			}
-			return utils.RequeueImmediately()
-		}
-	}
-
-	log.V(1).Info("DataLoad job still running", "namespace", ctx.Namespace, "jobName", jobName)
-	return utils.RequeueAfterInterval(20 * time.Second)
+func (r *dataLoadOperation) UpdateStatusInfoForCompleted(infos map[string]string) error {
+	// DataLoad does not need to update OperationStatus's Infos field.
+	return nil
 }
 
-// reconcileLoadedDataLoad reconciles DataLoads that are in `DataLoadPhaseComplete` phase
-func (r *DataLoadReconcilerImplement) reconcileLoadedDataLoad(ctx cruntime.ReconcileRequestContext, targetDataload datav1alpha1.DataLoad) (ctrl.Result, error) {
-	log := ctx.Log.WithName("reconcileLoadedDataLoad")
-	// 1. release lock on target dataset
-	err := r.releaseLockOnTargetDataset(ctx, targetDataload, log)
-	if err != nil {
-		log.Error(err, "can't release lock on target dataset", "targetDataset", targetDataload.Spec.Dataset)
-		return utils.RequeueIfError(err)
-	}
-
-	// 2. record event and no requeue
-	log.Info("DataLoad Loaded, no need to requeue")
-	jobName := utils.GetDataLoadJobName(utils.GetDataLoadReleaseName(targetDataload.Name))
-	r.Recorder.Eventf(&targetDataload, v1.EventTypeNormal, common.DataLoadJobComplete, "DataLoad job %s succeeded", jobName)
-	return utils.NoRequeue()
+func (r *dataLoadOperation) SetTargetDatasetStatusInProgress(dataset *datav1alpha1.Dataset) {
+	// DataLoad does not need to update Dataset other field except for DataOperationRef.
 }
 
-// reconcileFailedDataLoad reconciles DataLoads that are in `DataLoadPhaseComplete` phase
-func (r *DataLoadReconcilerImplement) reconcileFailedDataLoad(ctx cruntime.ReconcileRequestContext, targetDataload datav1alpha1.DataLoad) (ctrl.Result, error) {
-	log := ctx.Log.WithName("reconcileFailedDataLoad")
-	// 1. release lock on target dataset
-	err := r.releaseLockOnTargetDataset(ctx, targetDataload, log)
-	if err != nil {
-		log.Error(err, "can't release lock on target dataset", "targetDataset", targetDataload.Spec.Dataset)
-		return utils.RequeueIfError(err)
-	}
-
-	// 2. record event and no requeue
-	log.Info("DataLoad failed, won't requeue")
-	jobName := utils.GetDataLoadJobName(utils.GetDataLoadReleaseName(targetDataload.Name))
-	r.Recorder.Eventf(&targetDataload, v1.EventTypeNormal, common.DataLoadJobFailed, "DataLoad job %s failed", jobName)
-	return utils.NoRequeue()
+func (r *dataLoadOperation) RemoveTargetDatasetStatusInProgress(dataset *datav1alpha1.Dataset) {
+	// DataLoad does not need to update Dataset other field except for DataOperationRef.
 }
 
-// releaseLockOnTargetDataset releases lock on target dataset if the lock currently belongs to reconciling DataLoad.
-// We use a key-value pair on the target dataset's status as the lock. To release the lock, we can simply set the value to empty.
-func (r *DataLoadReconcilerImplement) releaseLockOnTargetDataset(ctx cruntime.ReconcileRequestContext, targetDataload datav1alpha1.DataLoad, log logr.Logger) error {
-	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		dataset, err := utils.GetDataset(r.Client, targetDataload.Spec.Dataset.Name, targetDataload.Spec.Dataset.Namespace)
-		if err != nil {
-			if utils.IgnoreNotFound(err) == nil {
-				log.Info("can't find target dataset, won't release lock", "targetDataset", targetDataload.Spec.Dataset.Name)
-				return nil
-			}
-			// other error
-			return err
-		}
-		if dataset.Status.DataLoadRef != utils.GetDataLoadRef(targetDataload.Name, targetDataload.Namespace) {
-			log.Info("Found DataLoadRef inconsistent with the reconciling DataLoad, won't release this lock, ignore it", "DataLoadRef", dataset.Status.DataLoadRef)
-			return nil
-		}
-		datasetToUpdate := dataset.DeepCopy()
-		datasetToUpdate.Status.DataLoadRef = ""
-		if !reflect.DeepEqual(datasetToUpdate.Status, dataset) {
-			if err := r.Status().Update(ctx, datasetToUpdate); err != nil {
-				return err
-			}
-		}
+func (r *dataLoadOperation) GetStatusHandler() dataoperation.StatusHandler {
+	policy := r.dataLoad.Spec.Policy
+
+	switch policy {
+	case datav1alpha1.Once:
+		return &OnceStatusHandler{Client: r.Client, dataLoad: r.dataLoad}
+	case datav1alpha1.Cron:
+		return &CronStatusHandler{Client: r.Client, dataLoad: r.dataLoad}
+	case datav1alpha1.OnEvent:
+		return &OnEventStatusHandler{Client: r.Client, dataLoad: r.dataLoad}
+	default:
 		return nil
-	})
-	return err
+	}
+}
+
+// GetTTL implements dataoperation.OperationInterface.
+func (r *dataLoadOperation) GetTTL() (ttl *int32, err error) {
+	dataLoad := r.dataLoad
+
+	policy := dataLoad.Spec.Policy
+	switch policy {
+	case datav1alpha1.Once:
+		ttl = dataLoad.Spec.TTLSecondsAfterFinished
+	case datav1alpha1.Cron, datav1alpha1.OnEvent:
+		// For Cron and OnEvent policies, no TTL is provided
+		ttl = nil
+	default:
+		err = fmt.Errorf("unknown policy type: %s", policy)
+	}
+
+	return
+}
+
+func (r *dataLoadOperation) GetParallelTaskNumber() int32 {
+	return 1
 }

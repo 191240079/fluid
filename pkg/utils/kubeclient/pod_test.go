@@ -8,9 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+
+	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,15 +27,17 @@ var (
 func init() {
 	testScheme = runtime.NewScheme()
 	_ = corev1.AddToScheme(testScheme)
+	_ = rbacv1.AddToScheme(testScheme)
 	_ = appsv1.AddToScheme(testScheme)
+	_ = batchv1.AddToScheme(testScheme)
 }
 
 func TestGetPVCNamesFromPod(t *testing.T) {
-	rand.Seed(time.Now().UnixNano())
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	pod := corev1.Pod{}
 	var pvcNamesWant []string
 	for i := 1; i <= 30; i++ {
-		switch rand.Intn(4) {
+		switch r.Intn(4) {
 		case 0:
 			pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
 				Name: "volume" + strconv.Itoa(i),
@@ -106,7 +111,9 @@ func TestIsCompletePod(t *testing.T) {
 	}, {
 		ObjectMeta: metav1.ObjectMeta{Name: "pod4",
 			Namespace:         namespace,
-			DeletionTimestamp: &metav1.Time{Time: time.Now()}},
+			DeletionTimestamp: &metav1.Time{Time: time.Now()},
+			Finalizers:        []string{"test.finalizer"},
+		},
 		Spec: corev1.PodSpec{},
 	}}
 
@@ -142,14 +149,16 @@ func TestIsCompletePod(t *testing.T) {
 				namespace: namespace,
 			},
 			want: true,
-		}, {
+		},
+		{
 			name: "Pod is failed",
 			args: args{
 				name:      "pod3",
 				namespace: namespace,
 			},
 			want: true,
-		}, {
+		},
+		{
 			name: "Pod's deletion timestamp not nil",
 			args: args{
 				name:      "pod4",
@@ -217,7 +226,9 @@ func TestGetPodByName(t *testing.T) {
 	}, {
 		ObjectMeta: metav1.ObjectMeta{Name: "pod4",
 			Namespace:         namespace,
-			DeletionTimestamp: &metav1.Time{Time: time.Now()}},
+			DeletionTimestamp: &metav1.Time{Time: time.Now()},
+			Finalizers:        []string{"test.finalizer"},
+		},
 		Spec: corev1.PodSpec{},
 	}}
 
@@ -449,6 +460,198 @@ func TestIsRunningAndReady(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := isRunningAndReady(tt.args.pod); got != tt.isRunning {
 				t.Errorf("testcase %v isRunningAndReady() = %v, want %v", tt.name, got, tt.isRunning)
+			}
+		})
+	}
+}
+
+func TestMergeNodeSelectorAndNodeAffinity(t *testing.T) {
+	type args struct {
+		nodeSelector map[string]string
+		podAffinity  *corev1.Affinity
+	}
+	tests := []struct {
+		name string
+		args args
+		want *corev1.NodeAffinity
+	}{
+		{
+			name: "pod affinity nil",
+			args: args{},
+			want: &corev1.NodeAffinity{RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+				NodeSelectorTerms: []corev1.NodeSelectorTerm{},
+			}},
+		},
+		{
+			name: "node affinity in pod nil",
+			args: args{
+				podAffinity: &corev1.Affinity{},
+			},
+			want: &corev1.NodeAffinity{RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+				NodeSelectorTerms: []corev1.NodeSelectorTerm{},
+			}},
+		},
+		{
+			name: "node affinity in pod is empty",
+			args: args{
+				podAffinity: &corev1.Affinity{
+					NodeAffinity: &corev1.NodeAffinity{},
+				},
+			},
+			want: &corev1.NodeAffinity{RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+				NodeSelectorTerms: []corev1.NodeSelectorTerm{},
+			}},
+		},
+		{
+			name: "no exist node affinity",
+			args: args{
+				nodeSelector: map[string]string{
+					"a": "b",
+				},
+				podAffinity: &corev1.Affinity{
+					NodeAffinity: &corev1.NodeAffinity{
+						PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{
+							{
+								Preference: corev1.NodeSelectorTerm{
+									MatchExpressions: []corev1.NodeSelectorRequirement{
+										{
+											Key:      "c",
+											Operator: corev1.NodeSelectorOpIn,
+											Values:   []string{"d"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{
+						{
+							MatchExpressions: []corev1.NodeSelectorRequirement{
+								{
+									Key:      "a",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"b"},
+								},
+							},
+						},
+					},
+				},
+				PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{
+					{
+						Preference: corev1.NodeSelectorTerm{
+							MatchExpressions: []corev1.NodeSelectorRequirement{
+								{
+									Key:      "c",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"d"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "no exist node affinity",
+			args: args{
+				nodeSelector: map[string]string{
+					"a": "b",
+				},
+			},
+			want: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{
+						{
+							MatchExpressions: []corev1.NodeSelectorRequirement{
+								{
+									Key:      "a",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"b"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "exist node affinity",
+			args: args{
+				nodeSelector: map[string]string{
+					"a": "b",
+				},
+				podAffinity: &corev1.Affinity{
+					NodeAffinity: &corev1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+							NodeSelectorTerms: []corev1.NodeSelectorTerm{
+								{
+									MatchExpressions: []corev1.NodeSelectorRequirement{
+										{
+											Key:      "c",
+											Operator: corev1.NodeSelectorOpIn,
+											Values:   []string{"d"},
+										},
+									},
+								},
+								{
+									MatchExpressions: []corev1.NodeSelectorRequirement{
+										{
+											Key:      "e",
+											Operator: corev1.NodeSelectorOpIn,
+											Values:   []string{"f"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{
+						{
+							MatchExpressions: []corev1.NodeSelectorRequirement{
+								{
+									Key:      "c",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"d"},
+								},
+								{
+									Key:      "a",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"b"},
+								},
+							},
+						},
+						{
+							MatchExpressions: []corev1.NodeSelectorRequirement{
+								{
+									Key:      "e",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"f"},
+								},
+								{
+									Key:      "a",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"b"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			nodeAffinity := MergeNodeSelectorAndNodeAffinity(tt.args.nodeSelector, tt.args.podAffinity)
+			if !reflect.DeepEqual(nodeAffinity, tt.want) {
+				t.Errorf("testcase %v IsFailedPod() = %v, want %v", tt.name, nodeAffinity, tt.want)
 			}
 		})
 	}

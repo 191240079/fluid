@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Author.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +18,11 @@ package kubeclient
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -48,5 +53,45 @@ func UpdateSecret(client client.Client, secret *v1.Secret) error {
 	if err := client.Update(context.TODO(), secret); err != nil {
 		return err
 	}
+	return nil
+}
+
+func CopySecretToNamespace(client client.Client, from types.NamespacedName, to types.NamespacedName, ownerReference *common.OwnerReference) error {
+	if _, err := GetSecret(client, to.Name, to.Namespace); err == nil {
+		return nil
+	}
+
+	secret, err := GetSecret(client, from.Name, from.Namespace)
+	if err != nil {
+		return err
+	}
+
+	secretToCreate := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      to.Name,
+			Namespace: to.Namespace,
+			Labels: map[string]string{
+				common.LabelAnnotationCopyFrom: fmt.Sprintf("%s_%s", from.Namespace, from.Name),
+			},
+		},
+		Data:       secret.Data,
+		StringData: secret.StringData,
+	}
+
+	if ownerReference != nil {
+		secretToCreate.OwnerReferences = append(secretToCreate.OwnerReferences, metav1.OwnerReference{
+			APIVersion:         ownerReference.APIVersion,
+			Kind:               ownerReference.Kind,
+			Name:               ownerReference.Name,
+			UID:                types.UID(ownerReference.UID),
+			Controller:         &ownerReference.Controller,
+			BlockOwnerDeletion: &ownerReference.BlockOwnerDeletion,
+		})
+	}
+
+	if err = CreateSecret(client, secretToCreate); err != nil {
+		return err
+	}
+
 	return nil
 }

@@ -1,4 +1,5 @@
 /*
+Copyright 2022 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,30 +17,26 @@ limitations under the License.
 package base
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/fluid-cloudnative/fluid/pkg/utils"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
+	"github.com/fluid-cloudnative/fluid/pkg/utils"
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Runtime Information interface defines the interfaces that should be implemented
-// by Alluxio Runtime or other implementation .
-// Thread safety is required from implementations of this interface.
-type RuntimeInfoInterface interface {
-	GetTieredStoreInfo() TieredStoreInfo
-
-	GetName() string
-
-	GetNamespace() string
-
-	GetRuntimeType() string
-
-	// GetStoragetLabelname(read common.ReadType, storage common.StorageType) string
+// Conventions defines naming convention for all runtime.
+// Conventions includes all the literal string used in Fluid
+// to identify the relationship between a dataset(runtime) and its component(master, worker, fuse, persistentVolume, etc.).
+type Conventions interface {
+	GetPersistentVolumeName() string
 
 	GetLabelNameForMemory() string
 
@@ -55,17 +52,38 @@ type RuntimeInfoInterface interface {
 
 	GetDatasetNumLabelName() string
 
-	GetPersistentVolumeName() string
+	GetWorkerStatefulsetName() string
+
+	GetExclusiveLabelValue() string
+}
+
+// Runtime Information interface defines the interfaces that should be implemented
+// by Alluxio Runtime or other implementation .
+// Thread safety is required from implementations of this interface.
+type RuntimeInfoInterface interface {
+	Conventions
+
+	GetTieredStoreInfo() TieredStoreInfo
+
+	GetName() string
+
+	GetNamespace() string
+
+	GetOwnerDatasetUID() string
+
+	GetRuntimeType() string
 
 	IsExclusive() bool
 
-	SetupFuseDeployMode(global bool, nodeSelector map[string]string)
+	SetFuseNodeSelector(nodeSelector map[string]string)
 
 	SetupFuseCleanPolicy(policy datav1alpha1.FuseCleanPolicy)
 
 	SetupWithDataset(dataset *datav1alpha1.Dataset)
 
-	GetFuseDeployMode() (global bool, nodeSelector map[string]string)
+	SetOwnerDatasetUID(alias types.UID)
+
+	GetFuseNodeSelector() (nodeSelector map[string]string)
 
 	GetFuseCleanPolicy() datav1alpha1.FuseCleanPolicy
 
@@ -77,16 +95,28 @@ type RuntimeInfoInterface interface {
 
 	IsDeprecatedPVName() bool
 
-	GetTemplateToInjectForFuse(pvcName string, enableCache bool) (*common.FuseInjectionTemplate, error)
+	GetFuseContainerTemplate() (template *common.FuseInjectionTemplate, err error)
 
 	SetClient(client client.Client)
+
+	GetMetadataList() []datav1alpha1.Metadata
+
+	GetAnnotations() map[string]string
+
+	GetFuseMetricsScrapeTarget() mountModeSelector
 }
+
+var _ RuntimeInfoInterface = &RuntimeInfo{}
 
 // The real Runtime Info should implement
 type RuntimeInfo struct {
-	name        string
-	namespace   string
-	runtimeType string
+	name      string
+	namespace string
+	// Use owner dataset's UID as ownerDatasetUID,
+	// ownerDatasetUID is used to identify the owner dataset of the runtime
+	// when the namespacedName of dataset is over length limit.
+	ownerDatasetUID string
+	runtimeType     string
 
 	//tieredstore datav1alpha1.TieredStore
 	tieredstoreInfo TieredStoreInfo
@@ -105,16 +135,20 @@ type RuntimeInfo struct {
 	deprecatedPVName bool
 
 	client client.Client
+
+	annotations map[string]string
+
+	metadataList []datav1alpha1.Metadata
 }
 
 type Fuse struct {
-	// fuse is deployed in global mode
-	Global bool
-
 	NodeSelector map[string]string
 
 	// CleanPolicy decides when to clean fuse pods.
 	CleanPolicy datav1alpha1.FuseCleanPolicy
+
+	// Metrics
+	MetricsScrapeTarget mountModeSelector
 }
 
 type TieredStoreInfo struct {
@@ -123,6 +157,10 @@ type TieredStoreInfo struct {
 
 type Level struct {
 	MediumType common.MediumType
+
+	VolumeType common.VolumeType
+
+	VolumeSource datav1alpha1.VolumeSource
 
 	CachePaths []CachePath
 
@@ -140,20 +178,89 @@ type CachePath struct {
 func BuildRuntimeInfo(name string,
 	namespace string,
 	runtimeType string,
-	tieredstore datav1alpha1.TieredStore) (runtime RuntimeInfoInterface, err error) {
-
-	tieredstoreInfo, err := convertToTieredstoreInfo(tieredstore)
-	if err != nil {
-		return nil, err
-	}
+	opts ...RuntimeInfoOption) (runtime RuntimeInfoInterface, err error) {
 
 	runtime = &RuntimeInfo{
-		name:            name,
-		namespace:       namespace,
-		runtimeType:     runtimeType,
-		tieredstoreInfo: tieredstoreInfo,
+		name:        name,
+		namespace:   namespace,
+		runtimeType: runtimeType,
+	}
+	for _, fn := range opts {
+		if err := fn(runtime.(*RuntimeInfo)); err != nil {
+			return nil, errors.Wrapf(err, "fail to build runtime info \"%s/%s\"", namespace, name)
+		}
 	}
 	return
+}
+
+type RuntimeInfoOption func(info *RuntimeInfo) error
+
+func GetMetadataListFromAnnotation(accessor metav1.ObjectMetaAccessor) (ret []datav1alpha1.Metadata) {
+	annotations := accessor.GetObjectMeta().GetAnnotations()
+	if annotations == nil {
+		return
+	}
+	m := annotations["data.fluid.io/metadataList"]
+	if m == "" {
+		return
+	}
+	if err := json.Unmarshal([]byte(m), &ret); err != nil {
+		log := ctrl.Log.WithName("base")
+		log.V(5).Error(err, "failed to unmarshal metadataList from annotations", "data.fluid.io/metadataList", m)
+	}
+	return
+}
+
+func WithMetadataList(metadataList []datav1alpha1.Metadata) RuntimeInfoOption {
+	return func(info *RuntimeInfo) error {
+		info.metadataList = metadataList
+		return nil
+	}
+}
+
+func (info *RuntimeInfo) GetMetadataList() []datav1alpha1.Metadata {
+	return info.metadataList
+}
+
+func WithAnnotations(annotations map[string]string) RuntimeInfoOption {
+	return func(info *RuntimeInfo) error {
+		info.annotations = annotations
+		return nil
+	}
+}
+
+func (info *RuntimeInfo) GetAnnotations() map[string]string {
+	return info.annotations
+}
+
+func WithClientMetrics(clientMetrics datav1alpha1.ClientMetrics) RuntimeInfoOption {
+	return func(info *RuntimeInfo) error {
+		if len(clientMetrics.ScrapeTarget) == 0 {
+			// When scrape target is not set, default it to None
+			clientMetrics.ScrapeTarget = MountModeSelectNone
+		}
+		metricsScrapeTarget, err := ParseMountModeSelectorFromStr(clientMetrics.ScrapeTarget)
+		if err != nil {
+			return err
+		}
+		info.fuse.MetricsScrapeTarget = metricsScrapeTarget
+		return nil
+	}
+}
+
+func (info *RuntimeInfo) GetFuseMetricsScrapeTarget() mountModeSelector {
+	return info.fuse.MetricsScrapeTarget
+}
+
+func WithTieredStore(tieredStore datav1alpha1.TieredStore) RuntimeInfoOption {
+	return func(info *RuntimeInfo) error {
+		tieredStoreInfo, err := convertToTieredstoreInfo(tieredStore)
+		if err != nil {
+			return err
+		}
+		info.tieredstoreInfo = tieredStoreInfo
+		return nil
+	}
 }
 
 func (info *RuntimeInfo) GetTieredStoreInfo() TieredStoreInfo {
@@ -175,6 +282,10 @@ func (info *RuntimeInfo) GetNamespace() string {
 	return info.namespace
 }
 
+func (info *RuntimeInfo) GetOwnerDatasetUID() string {
+	return info.ownerDatasetUID
+}
+
 // GetRuntimeType gets runtime type
 func (info *RuntimeInfo) GetRuntimeType() string {
 	return info.runtimeType
@@ -190,16 +301,21 @@ func (info *RuntimeInfo) SetupWithDataset(dataset *datav1alpha1.Dataset) {
 	info.exclusive = dataset.IsExclusiveMode()
 }
 
-// SetupFuseDeployMode setups the fuse deploy mode
-func (info *RuntimeInfo) SetupFuseDeployMode(global bool, nodeSelector map[string]string) {
-	// Since Fluid v0.7.0, global is deprecated.
-	info.fuse.Global = true
+// SetupWithDataset determines if need to setup with the info of dataset
+func (info *RuntimeInfo) SetOwnerDatasetUID(datasetUID types.UID) {
+	if datasetUID == "" {
+		return
+	}
+	info.ownerDatasetUID = string(datasetUID)
+}
+
+// SetFuseNodeSelector setups the fuse deploy mode
+func (info *RuntimeInfo) SetFuseNodeSelector(nodeSelector map[string]string) {
 	info.fuse.NodeSelector = nodeSelector
 }
 
-// GetFuseDeployMode gets the fuse deploy mode
-func (info *RuntimeInfo) GetFuseDeployMode() (global bool, nodeSelector map[string]string) {
-	global = info.fuse.Global
+// GetFuseNodeSelector gets the fuse deploy mode
+func (info *RuntimeInfo) GetFuseNodeSelector() (nodeSelector map[string]string) {
 	nodeSelector = info.fuse.NodeSelector
 	return
 }
@@ -288,10 +404,12 @@ func convertToTieredstoreInfo(tieredstore datav1alpha1.TieredStore) (TieredStore
 		}
 
 		tieredstoreInfo.Levels = append(tieredstoreInfo.Levels, Level{
-			MediumType: level.MediumType,
-			CachePaths: cachePaths,
-			High:       level.High,
-			Low:        level.Low,
+			MediumType:   level.MediumType,
+			VolumeType:   level.VolumeType,
+			VolumeSource: level.VolumeSource,
+			CachePaths:   cachePaths,
+			High:         level.High,
+			Low:          level.Low,
 		})
 	}
 	return tieredstoreInfo, nil
@@ -309,50 +427,119 @@ func GetRuntimeInfo(client client.Client, name, namespace string) (runtimeInfo R
 		runtimeType = dataset.Status.Runtimes[0].Type
 	}
 	switch runtimeType {
-	case common.ALLUXIO_RUNTIME:
-		runtimeInfo, err = BuildRuntimeInfo(name, namespace, common.ALLUXIO_RUNTIME, datav1alpha1.TieredStore{})
-		if err != nil {
-			return runtimeInfo, err
-		}
+	case common.AlluxioRuntime:
 		alluxioRuntime, err := utils.GetAlluxioRuntime(client, name, namespace)
 		if err != nil {
 			return runtimeInfo, err
 		}
-		runtimeInfo.SetupFuseDeployMode(alluxioRuntime.Spec.Fuse.Global, alluxioRuntime.Spec.Fuse.NodeSelector)
-		runtimeInfo.SetupFuseCleanPolicy(alluxioRuntime.Spec.Fuse.CleanPolicy)
-	case common.JindoRuntime:
-		runtimeInfo, err = BuildRuntimeInfo(name, namespace, common.JindoRuntime, datav1alpha1.TieredStore{})
+		opts := []RuntimeInfoOption{
+			WithTieredStore(datav1alpha1.TieredStore{}),
+			WithMetadataList(GetMetadataListFromAnnotation(alluxioRuntime)),
+			WithAnnotations(alluxioRuntime.Annotations),
+		}
+		runtimeInfo, err = BuildRuntimeInfo(name, namespace, common.AlluxioRuntime, opts...)
 		if err != nil {
 			return runtimeInfo, err
 		}
+		runtimeInfo.SetFuseNodeSelector(alluxioRuntime.Spec.Fuse.NodeSelector)
+		runtimeInfo.SetupFuseCleanPolicy(alluxioRuntime.Spec.Fuse.CleanPolicy)
+	case common.JindoRuntime:
 		jindoRuntime, err := utils.GetJindoRuntime(client, name, namespace)
 		if err != nil {
 			return runtimeInfo, err
 		}
-		runtimeInfo.SetupFuseDeployMode(jindoRuntime.Spec.Fuse.Global, jindoRuntime.Spec.Fuse.NodeSelector)
-		runtimeInfo.SetupFuseCleanPolicy(jindoRuntime.Spec.Fuse.CleanPolicy)
-	case common.GooseFSRuntime:
-		runtimeInfo, err = BuildRuntimeInfo(name, namespace, common.GooseFSRuntime, datav1alpha1.TieredStore{})
+		opts := []RuntimeInfoOption{
+			WithTieredStore(datav1alpha1.TieredStore{}),
+			WithMetadataList(GetMetadataListFromAnnotation(jindoRuntime)),
+			WithClientMetrics(jindoRuntime.Spec.Fuse.Metrics),
+			WithAnnotations(jindoRuntime.Annotations),
+		}
+		runtimeInfo, err = BuildRuntimeInfo(name, namespace, common.JindoRuntime, opts...)
 		if err != nil {
 			return runtimeInfo, err
 		}
+		runtimeInfo.SetFuseNodeSelector(jindoRuntime.Spec.Fuse.NodeSelector)
+		runtimeInfo.SetupFuseCleanPolicy(jindoRuntime.Spec.Fuse.CleanPolicy)
+	case common.GooseFSRuntime:
 		goosefsRuntime, err := utils.GetGooseFSRuntime(client, name, namespace)
 		if err != nil {
 			return runtimeInfo, err
 		}
-		runtimeInfo.SetupFuseDeployMode(goosefsRuntime.Spec.Fuse.Global, goosefsRuntime.Spec.Fuse.NodeSelector)
-		runtimeInfo.SetupFuseCleanPolicy(goosefsRuntime.Spec.Fuse.CleanPolicy)
-	case common.JuiceFSRuntime:
-		runtimeInfo, err = BuildRuntimeInfo(name, namespace, common.JuiceFSRuntime, datav1alpha1.TieredStore{})
+		opts := []RuntimeInfoOption{
+			WithTieredStore(datav1alpha1.TieredStore{}),
+			WithMetadataList(GetMetadataListFromAnnotation(goosefsRuntime)),
+			WithAnnotations(goosefsRuntime.Annotations),
+		}
+		runtimeInfo, err = BuildRuntimeInfo(name, namespace, common.GooseFSRuntime, opts...)
 		if err != nil {
 			return runtimeInfo, err
 		}
+		runtimeInfo.SetFuseNodeSelector(goosefsRuntime.Spec.Fuse.NodeSelector)
+		runtimeInfo.SetupFuseCleanPolicy(goosefsRuntime.Spec.Fuse.CleanPolicy)
+	case common.JuiceFSRuntime:
 		juicefsRuntime, err := utils.GetJuiceFSRuntime(client, name, namespace)
 		if err != nil {
 			return runtimeInfo, err
 		}
-		runtimeInfo.SetupFuseDeployMode(juicefsRuntime.Spec.Fuse.Global, juicefsRuntime.Spec.Fuse.NodeSelector)
+		opts := []RuntimeInfoOption{
+			WithTieredStore(datav1alpha1.TieredStore{}),
+			WithMetadataList(GetMetadataListFromAnnotation(juicefsRuntime)),
+			WithAnnotations(juicefsRuntime.Annotations),
+		}
+		runtimeInfo, err = BuildRuntimeInfo(name, namespace, common.JuiceFSRuntime, opts...)
+		if err != nil {
+			return runtimeInfo, err
+		}
+		runtimeInfo.SetFuseNodeSelector(juicefsRuntime.Spec.Fuse.NodeSelector)
 		runtimeInfo.SetupFuseCleanPolicy(juicefsRuntime.Spec.Fuse.CleanPolicy)
+	case common.ThinRuntime:
+		thinRuntime, err := utils.GetThinRuntime(client, name, namespace)
+		if err != nil {
+			return runtimeInfo, err
+		}
+		opts := []RuntimeInfoOption{
+			WithTieredStore(datav1alpha1.TieredStore{}),
+			WithMetadataList(GetMetadataListFromAnnotation(thinRuntime)),
+			WithAnnotations(thinRuntime.Annotations),
+		}
+		runtimeInfo, err = BuildRuntimeInfo(name, namespace, common.ThinRuntime, opts...)
+		if err != nil {
+			return runtimeInfo, err
+		}
+		runtimeInfo.SetFuseNodeSelector(thinRuntime.Spec.Fuse.NodeSelector)
+		runtimeInfo.SetupFuseCleanPolicy(thinRuntime.Spec.Fuse.CleanPolicy)
+	case common.EFCRuntime:
+		efcRuntime, err := utils.GetEFCRuntime(client, name, namespace)
+		if err != nil {
+			return runtimeInfo, err
+		}
+		opts := []RuntimeInfoOption{
+			WithTieredStore(datav1alpha1.TieredStore{}),
+			WithMetadataList(GetMetadataListFromAnnotation(efcRuntime)),
+			WithAnnotations(efcRuntime.Annotations),
+		}
+		runtimeInfo, err = BuildRuntimeInfo(name, namespace, common.EFCRuntime, opts...)
+		if err != nil {
+			return runtimeInfo, err
+		}
+		runtimeInfo.SetFuseNodeSelector(efcRuntime.Spec.Fuse.NodeSelector)
+		runtimeInfo.SetupFuseCleanPolicy(efcRuntime.Spec.Fuse.CleanPolicy)
+	case common.VineyardRuntime:
+		vineyardRuntime, err := utils.GetVineyardRuntime(client, name, namespace)
+		if err != nil {
+			return runtimeInfo, err
+		}
+		opts := []RuntimeInfoOption{
+			WithTieredStore(datav1alpha1.TieredStore{}),
+			WithMetadataList(GetMetadataListFromAnnotation(vineyardRuntime)),
+			WithAnnotations(vineyardRuntime.Annotations),
+		}
+		runtimeInfo, err = BuildRuntimeInfo(name, namespace, common.VineyardRuntime, opts...)
+		if err != nil {
+			return runtimeInfo, err
+		}
+		runtimeInfo.SetFuseNodeSelector(common.VineyardFuseNodeSelector)
+		runtimeInfo.SetupFuseCleanPolicy(vineyardRuntime.Spec.Fuse.CleanPolicy)
 	default:
 		err = fmt.Errorf("fail to get runtimeInfo for runtime type: %s", runtimeType)
 		return
@@ -360,6 +547,57 @@ func GetRuntimeInfo(client client.Client, name, namespace string) (runtimeInfo R
 
 	if runtimeInfo != nil {
 		runtimeInfo.SetClient(client)
+		runtimeInfo.SetOwnerDatasetUID(dataset.UID)
 	}
 	return runtimeInfo, err
+}
+
+func GetRuntimeStatus(client client.Client, runtimeType, name, namespace string) (status *datav1alpha1.RuntimeStatus, err error) {
+	switch runtimeType {
+	case common.AlluxioRuntime:
+		runtime, err := utils.GetAlluxioRuntime(client, name, namespace)
+		if err != nil {
+			return status, err
+		}
+		return &runtime.Status, nil
+	case common.JindoRuntime:
+		runtime, err := utils.GetJindoRuntime(client, name, namespace)
+		if err != nil {
+			return status, err
+		}
+		return &runtime.Status, nil
+	case common.GooseFSRuntime:
+		runtime, err := utils.GetGooseFSRuntime(client, name, namespace)
+		if err != nil {
+			return status, err
+		}
+		return &runtime.Status, nil
+	case common.JuiceFSRuntime:
+		runtime, err := utils.GetJuiceFSRuntime(client, name, namespace)
+		if err != nil {
+			return status, err
+		}
+		return &runtime.Status, nil
+	case common.EFCRuntime:
+		runtime, err := utils.GetEFCRuntime(client, name, namespace)
+		if err != nil {
+			return status, err
+		}
+		return &runtime.Status, nil
+	case common.ThinRuntime:
+		runtime, err := utils.GetThinRuntime(client, name, namespace)
+		if err != nil {
+			return status, err
+		}
+		return &runtime.Status, nil
+	case common.VineyardRuntime:
+		runtime, err := utils.GetVineyardRuntime(client, name, namespace)
+		if err != nil {
+			return status, err
+		}
+		return &runtime.Status, nil
+	default:
+		err = fmt.Errorf("fail to get runtimeInfo for runtime type: %s", runtimeType)
+		return nil, err
+	}
 }

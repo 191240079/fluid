@@ -1,11 +1,11 @@
 /*
-Copyright 2021 The Fluid Authors.
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,22 +13,23 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package juicefs
 
 import (
 	"testing"
 
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	ctrlhelper "github.com/fluid-cloudnative/fluid/pkg/ctrl"
 
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
@@ -38,20 +39,20 @@ import (
 
 func newJuiceFSEngineREP(client client.Client, name string, namespace string) *JuiceFSEngine {
 
-	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, "juicefs", v1alpha1.TieredStore{})
+	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, common.JuiceFSRuntime)
 	engine := &JuiceFSEngine{
 		runtime:     &v1alpha1.JuiceFSRuntime{},
 		name:        name,
 		namespace:   namespace,
 		Client:      client,
 		runtimeInfo: runTimeInfo,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 	}
 	return engine
 }
 
 func TestSyncReplicas(t *testing.T) {
-	nodeInputs := []*v1.Node{
+	nodeInputs := []*corev1.Node{
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test-node-spark",
@@ -264,14 +265,14 @@ func TestSyncReplicas(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		engine := newJuiceFSEngineREP(fakeClient, testCase.name, testCase.namespace)
-		runtimeInfo, err := base.BuildRuntimeInfo(testCase.name, testCase.namespace, "juicefs", v1alpha1.TieredStore{})
+		runtimeInfo, err := base.BuildRuntimeInfo(testCase.name, testCase.namespace, common.JuiceFSRuntime)
 		if err != nil {
 			t.Errorf("JuiceFSEngine.CheckWorkersReady() error = %v", err)
 		}
 
 		engine.Helper = ctrlhelper.BuildHelper(runtimeInfo, fakeClient, engine.Log)
 		err = engine.SyncReplicas(cruntime.ReconcileRequestContext{
-			Log:      log.NullLogger{},
+			Log:      fake.NullLogger(),
 			Recorder: record.NewFakeRecorder(300),
 		})
 		if err != nil {

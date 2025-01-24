@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,39 +19,58 @@ package utils
 import (
 	"errors"
 	"fmt"
-	"github.com/golang/glog"
-	"io/ioutil"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/mount"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
+
+	"github.com/fluid-cloudnative/fluid/pkg/utils/cmdguard"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/validation"
+	"github.com/golang/glog"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/mount"
 )
 
 const MountRoot string = "MOUNT_ROOT"
 
-//GetMountRoot gets the value of the env variable named MOUNT_ROOT
+// GetMountRoot gets the value of the env variable named MOUNT_ROOT
 func GetMountRoot() (string, error) {
 	mountRoot := os.Getenv(MountRoot)
 
-	if !filepath.IsAbs(mountRoot) {
-		return mountRoot, fmt.Errorf("the the value of the env variable named MOUNT_ROOT is illegal")
+	if err := validation.IsValidMountRoot(mountRoot); err != nil {
+		return mountRoot, err
 	}
 	return mountRoot, nil
 }
 
-func CheckMountReady(fluidPath string, mountType string) error {
+func CheckMountReadyAndSubPathExist(fluidPath string, mountType string, subPath string) (err error) {
 	glog.Infof("Try to check if the mount target %s is ready", fluidPath)
 	if fluidPath == "" {
 		return errors.New("target is not specified for checking the mount")
 	}
-	args := []string{fluidPath, mountType}
-	command := exec.Command("/usr/local/bin/check_mount.sh", args...)
+	args := []string{fluidPath, mountType, subPath}
+	command, err := cmdguard.Command("/usr/local/bin/check_mount.sh", args...)
+	if err != nil {
+		return
+	}
 	glog.Infoln(command)
 	stdoutStderr, err := command.CombinedOutput()
 	glog.Infoln(string(stdoutStderr))
-	return err
+
+	if err != nil {
+		var checkMountErr *exec.ExitError
+		if errors.As(err, &checkMountErr) {
+			switch checkMountErr.ExitCode() {
+			case 1:
+				// exitcode=1 indicates timeout waiting for mount point to be ready
+				return errors.New("timeout waiting for FUSE mount point to be ready")
+			case 2:
+				// exitcode=2 indicates subPath not exists
+				return fmt.Errorf("subPath \"%s\" not exists under FUSE mount", subPath)
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func IsMounted(absPath string) (bool, error) {
@@ -60,7 +80,7 @@ func IsMounted(absPath string) (bool, error) {
 		return false, err
 	}
 
-	file, err := ioutil.ReadFile("/proc/mounts")
+	file, err := os.ReadFile("/proc/mounts")
 	if err != nil {
 		return false, err
 	}
@@ -114,4 +134,17 @@ func IsFusePod(pod corev1.Pod) bool {
 		}
 	}
 	return false
+}
+
+// PathExists returns true if the specified path exists. The code is replicated from "k8s.io/utils/mount.PathExists".
+func MountPathExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	} else if os.IsNotExist(err) {
+		return false, nil
+	} else if mount.IsCorruptedMnt(err) {
+		return true, err
+	}
+	return false, err
 }

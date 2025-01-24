@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,46 +17,46 @@ limitations under the License.
 package alluxio
 
 const (
+	// NON_NATIVE_MOUNT_DATA_NAME also used in master 'statefulset.yaml' and config 'alluxio-mount.conf.yaml'
+	NON_NATIVE_MOUNT_DATA_NAME = "mount.info"
 
 	// alluxioHome string = "/opt/alluxio"
 
 	// alluxioUser string = "fluid"
-	METRICS_PREFIX_BYTES_READ_LOCAL = "Cluster.BytesReadLocal "
+	metricsPrefixBytesReadLocal = "Cluster.BytesReadLocal "
 
-	METRICS_PREFIX_BYTES_READ_REMOTE = "Cluster.BytesReadRemote "
+	metricsPrefixBytesReadRemote = "Cluster.BytesReadRemote "
 
-	METRICS_PREFIX_BYTES_READ_UFS_ALL = "Cluster.BytesReadUfsAll "
+	metricsPrefixBytesReadUfsAll = "Cluster.BytesReadUfsAll "
 
-	METRICS_PREFIX_BYTES_READ_LOCAL_THROUGHPUT = "Cluster.BytesReadLocalThroughput "
+	metricsPrefixBytesReadLocalThroughput = "Cluster.BytesReadLocalThroughput "
 
-	METRICS_PREFIX_BYTES_READ_REMOTE_THROUGHPUT = "Cluster.BytesReadRemoteThroughput "
+	metricsPrefixBytesReadRemoteThroughput = "Cluster.BytesReadRemoteThroughput "
 
-	METRICS_PREFIX_BYTES_READ_UFS_THROUGHPUT = "Cluster.BytesReadUfsThroughput "
+	metricsPrefixBytesReadUfsThroughput = "Cluster.BytesReadUfsThroughput "
 
-	SUMMARY_PREFIX_TOTAL_CAPACITY = "Total Capacity: "
+	metadataSyncNotDoneMsg = "[Calculating]"
 
-	SUMMARY_PREFIX_USED_CAPACITY = "Used Capacity: "
+	alluxioRuntimeMetricsLabel = "alluxio_runtime_metrics"
 
-	METADATA_SYNC_NOT_DONE_MSG = "[Calculating]"
+	checkMetadataSyncDoneTimeoutMillisec = 500
 
-	ALLUXIO_RUNTIME_METRICS_LABEL = "alluxio_runtime_metrics"
+	portNum = 9
 
-	CHECK_METADATA_SYNC_DONE_TIMEOUT_MILLISEC = 500
+	cacheHitQueryIntervalMin = 1
 
-	AUTO_SELECT_PORT_MIN = 20000
-	AUTO_SELECT_PORT_MAX = 30000
+	hadoopConfHdfsSiteFilename = "hdfs-site.xml"
 
-	PORT_NUM = 9
+	hadoopConfCoreSiteFilename = "core-site.xml"
 
-	CACHE_HIT_QUERY_INTERVAL_MIN = 1
+	hadoopConfMountPath = "/hdfs-config"
 
-	HADOOP_CONF_HDFS_SITE_FILENAME = "hdfs-site.xml"
+	wokrerPodRole = "alluxio-worker"
 
-	HADOOP_CONF_CORE_SITE_FILENAME = "core-site.xml"
+	// defaultGracefulShutdownLimits is the limit for the system to forcibly clean up.
+	defaultGracefulShutdownLimits       int32 = 3
+	defaultCleanCacheGracePeriodSeconds int32 = 60
 
-	HADOOP_CONF_MOUNT_PATH = "/hdfs-config"
-
-	POD_ROLE_TYPE = "role"
-
-	WOKRER_POD_ROLE = "alluxio-worker"
+	MountConfigStorage   = "ALLUXIO_MOUNT_CONFIG_STORAGE"
+	ConfigmapStorageName = "configmap"
 )

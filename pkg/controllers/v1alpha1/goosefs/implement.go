@@ -1,4 +1,5 @@
 /*
+Copyright 2021 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +18,6 @@ package goosefs
 
 import (
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
-	"github.com/fluid-cloudnative/fluid/pkg/common"
 	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
 
 	"github.com/fluid-cloudnative/fluid/pkg/ddc"
@@ -25,7 +25,6 @@ import (
 )
 
 const (
-	runtimeType                  = common.GooseFSRuntime
 	runtimeResourceFinalizerName = "goosefs-runtime-controller-finalizer"
 )
 

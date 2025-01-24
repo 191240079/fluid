@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,6 +17,8 @@ limitations under the License.
 package common
 
 import (
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -73,8 +76,8 @@ const (
 type ResourceList map[corev1.ResourceName]string
 
 type Resources struct {
-	Requests ResourceList `yaml:"requests,omitempty"`
-	Limits   ResourceList `yaml:"limits,omitempty"`
+	Requests ResourceList `json:"requests,omitempty" yaml:"requests,omitempty"`
+	Limits   ResourceList `json:"limits,omitempty" yaml:"limits,omitempty"`
 }
 
 const (
@@ -85,19 +88,21 @@ const (
 
 // UserInfo to run a Container
 type UserInfo struct {
-	User    int `yaml:"user"`
-	Group   int `yaml:"group"`
-	FSGroup int `yaml:"fsGroup"`
+	User    int `json:"user" yaml:"user"`
+	Group   int `json:"group" yaml:"group"`
+	FSGroup int `json:"fsGroup" yaml:"fsGroup"`
 }
 
 // ImageInfo to run a Container
 type ImageInfo struct {
 	// Image of a Container
-	Image string `yaml:"image"`
+	Image string `json:"image" yaml:"image"`
 	// ImageTag of a Container
-	ImageTag string `yaml:"imageTag"`
+	ImageTag string `json:"imageTag" yaml:"imageTag"`
 	// ImagePullPolicy is one of the three policies: `Always`,  `IfNotPresent`, `Never`
-	ImagePullPolicy string `yaml:"imagePullPolicy"`
+	ImagePullPolicy string `json:"imagePullPolicy" yaml:"imagePullPolicy"`
+	// ImagePullSecrets
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets" yaml:"imagePullSecrets"`
 }
 
 // Phase is a valid value of a task stage
@@ -124,21 +129,21 @@ const (
 )
 
 type OwnerReference struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled bool `json:"enabled" yaml:"enabled"`
 	// API version of the referent.
-	APIVersion string `yaml:"apiVersion"`
+	APIVersion string `json:"apiVersion" yaml:"apiVersion"`
 	// Kind of the referent.
-	Kind string `yaml:"kind"`
+	Kind string `json:"kind" yaml:"kind"`
 	// Name of the referent.
-	Name string `yaml:"name"`
+	Name string `json:"name" yaml:"name"`
 	// UID of the referent.
-	UID string `yaml:"uid"`
+	UID string `json:"uid" yaml:"uid"`
 	// If true, this reference points to the managing controller.
 	// +optional
-	Controller bool `yaml:"controller"`
+	Controller bool `json:"controller" yaml:"controller"`
 	// If true, AND if the owner has the "foregroundDeletion" finalizer, then
 	// +optional
-	BlockOwnerDeletion bool `yaml:"blockOwnerDeletion"`
+	BlockOwnerDeletion bool `json:"blockOwnerDeletion" yaml:"blockOwnerDeletion"`
 }
 
 // FuseInjectionTemplate for injecting fuse container into the pod
@@ -150,6 +155,29 @@ type FuseInjectionTemplate struct {
 	VolumeMountsToAdd    []corev1.VolumeMount
 	VolumesToUpdate      []corev1.Volume
 	VolumesToAdd         []corev1.Volume
+
+	FuseMountInfo FuseMountInfo
+}
+
+type FuseMountInfo struct {
+	SubPath            string
+	HostMountPath      string
+	ContainerMountPath string
+	FsType             string
+}
+
+// FuseSidecarInjectOption are options for webhook to inject fuse sidecar containers
+type FuseSidecarInjectOption struct {
+	EnableCacheDir             bool
+	EnableUnprivilegedSidecar  bool
+	SkipSidecarPostStartInject bool
+}
+
+func (f FuseSidecarInjectOption) String() string {
+	return fmt.Sprintf("EnableCacheDir=%v;EnableUnprivilegedSidecar=%v;SkipSidecarPostStartInject=%v",
+		f.EnableCacheDir,
+		f.EnableUnprivilegedSidecar,
+		f.SkipSidecarPostStartInject)
 }
 
 // The Application which is using Fluid,
@@ -171,9 +199,13 @@ type FluidObject interface {
 
 	SetVolumes(volumes []corev1.Volume) (err error)
 
+	GetInitContainers() (containers []corev1.Container, err error)
+
 	GetContainers() (containers []corev1.Container, err error)
 
 	SetContainers(containers []corev1.Container) (err error)
+
+	SetInitContainers(containers []corev1.Container) (err error)
 
 	GetVolumeMounts() (volumeMounts []corev1.VolumeMount, err error)
 

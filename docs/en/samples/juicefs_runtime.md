@@ -10,7 +10,7 @@ About how to use JuiceFS you can refer to the document [JuiceFS Quick Start Guid
 
 You can download the latest Fluid installation package from [Fluid Releases](https://github.com/fluid-cloudnative/fluid/releases).
 
-Set `runtime.juicefs.enable` to `true` in Fluid chart, then refer to the [Installation document](../userguide/install.md) to complete the installation
+Refer to the [Installation document](../userguide/install.md) to complete the installation.
 
 ```shell
 $ kubectl get po -n fluid-system
@@ -20,10 +20,9 @@ csi-nodeplugin-fluid-k7cqt                   2/2     Running             0      
 csi-nodeplugin-fluid-x9dfd                   2/2     Running             0          113s
 dataset-controller-57ddd56b54-9vd86          1/1     Running             0          113s
 fluid-webhook-84467465f8-t65mr               1/1     Running             0          113s
-juicefsruntime-controller-56df96b75f-qzq8x   1/1     Running             0          113s
 ```
 
-Make sure `juicefsruntime-controller`, `dataset-controller`, `fluid-webhook` pod and `csi-nodeplugin` pods work well.
+Make sure `dataset-controller`, `fluid-webhook` pod and `csi-nodeplugin` pods work well. `juicefs-runtime-controller` will be installed automatically when JuiceFSRuntime created.
 
 ## Create new work environment
 
@@ -34,6 +33,10 @@ $ cd <any-path>/juicefs
 
 ## Demo
 
+The fields required for using JuiceFS Community Edition and Cloud Service Edition are different. The following describes how to use them:
+
+### Community edition
+
 Before using JuiceFS, you need to provide parameters for metadata services (such as Redis) and object storage services (such as MinIO), and create corresponding secrets:
 
 ```shell
@@ -42,6 +45,10 @@ kubectl create secret generic jfs-secret \
     --from-literal=access-key=<accesskey> \
     --from-literal=secret-key=<secretkey>
 ```
+
+- `metaurl`: Connection URL for metadata engine (e.g. Redis). Read [this document](https://juicefs.com/docs/community/databases_for_metadata/) for more information.
+- `access-key`: Access key of object storage.
+- `secret-key`: Secret key of object storage.
 
 **Check `Dataset` to be created**
 
@@ -77,7 +84,9 @@ spec:
 EOF
 ```
 
-> **Note**: `/demo` refers to the subpath of JuiceFS, which is the directory of the JuiceFS file system where users store data in.
+- `mountPoint`: Refers to the subdirectory of JuiceFS, which is the directory where users store data in the JuiceFS file system, starts with `juicefs://`. For example, `juicefs:///demo` is the `/demo` subdirectory of the JuiceFS file system.
+- `bucket`: Bucket URL. For example, using S3 as object storage, bucket is `https://myjuicefs.s3.us-east-2.amazonaws.com`. Read [this document](https://juicefs.com/docs/community/how_to_setup_object_storage/) to learn how to setup different object storage.
+- `storage`: Specify the type of storage to be used by the file system, e.g. `s3`, `gs`, `oss`. Read [this document](https://juicefs.com/docs/community/how_to_setup_object_storage/) for more details.
 
 > **Attention**: Only `name` and `metaurl` are required. If the JuiceFS has been formatted, you only need to fill in the `name` and `metaurl`.
 
@@ -137,7 +146,7 @@ Wait a while for the various components of `JuiceFSRuntime` to start smoothly, a
 
 ```shell
 $ kubectl get po |grep jfs
-jfsdemo-worker-mjplw                                           1/1     Running   0          4m2s
+jfsdemo-worker-0                                           1/1     Running   0          4m2s
 ```
 
 `JuiceFSRuntime` does not have master, but the FUSE component implements lazy startup and will be created when the pod is used.
@@ -190,7 +199,175 @@ pod/demo-app created
 $ kubectl get po |grep demo
 demo-app                                                       1/1     Running   0          31s
 jfsdemo-fuse-fx7np                                             1/1     Running   0          31s
-jfsdemo-worker-mjplw                                           1/1     Running   0          10m
+jfsdemo-worker-0                                               1/1     Running   0          10m
+```
+
+You can see that the pod has been created successfully, and the FUSE component of JuiceFS has also started successfully.
+
+### Cloud service edition
+
+Before using JuiceFS, you need to provide token managed by JuiceFS and object storage services (such as MinIO), and create corresponding secrets:
+
+```shell
+kubectl create secret generic jfs-secret \
+    --from-literal=token=<token> \
+    --from-literal=access-key=<accesskey>  \
+    --from-literal=secret-key=<secretkey>
+```
+
+- `token`: JuiceFS managed token. Read [this document](https://juicefs.com/docs/cloud/metadata/#token-management) for more details.
+- `access-key`: Access key of object storage.
+- `secret-key`: Secret key of object storage.
+
+**Check `Dataset` to be created**
+
+```yaml
+$ cat<<EOF >dataset.yaml
+apiVersion: data.fluid.io/v1alpha1
+kind: Dataset
+metadata:
+  name: jfsdemo
+spec:
+  mounts:
+    - name: minio
+      mountPoint: "juicefs:///demo"
+      options:
+        bucket: "<bucket>"
+      encryptOptions:
+        - name: token
+          valueFrom:
+            secretKeyRef:
+              name: jfs-secret
+              key: token
+        - name: access-key
+          valueFrom:
+            secretKeyRef:
+              name: jfs-secret
+              key: access-key
+        - name: secret-key
+          valueFrom:
+            secretKeyRef:
+              name: jfs-secret
+              key: secret-key
+EOF
+```
+
+- `name`: It needs to be the same as the volume name created in the JuiceFS console.
+- `mountPoint`: Refers to the subdirectory of JuiceFS, which is the directory where users store data in the JuiceFS file system, starts with `juicefs://`. For example, `juicefs:///demo` is the `/demo` subdirectory of the JuiceFS file system.
+- `bucket`: Bucket URL. For example, using S3 as object storage, bucket is `https://myjuicefs.s3.us-east-2.amazonaws.com`. Read [this document](https://juicefs.com/docs/community/how_to_setup_object_storage/) to learn how to setup different object storage.
+
+> **Attention**: `name` and `token` are required.
+
+Since JuiceFS uses local cache, the corresponding `Dataset` supports only one mount, and JuiceFS does not have UFS, you can specify subdirectory in `mountPoint` (`juicefs:///` represents root directory), and it will be mounted as the root directory into the container.
+
+**Create `Dataset`**
+```shell
+$ kubectl create -f dataset.yaml
+dataset.data.fluid.io/jfsdemo created
+```
+
+**Check `Dataset` status**
+```shell
+$ kubectl get dataset jfsdemo
+NAME      UFS TOTAL SIZE   CACHED   CACHE CAPACITY   CACHED PERCENTAGE   PHASE      AGE
+jfsdemo                                                                  NotBound   44s
+```
+
+As shown above, the value of the `phase` in `status` is `NotBound`, which means that the `Dataset` resource is not currently bound to any `JuiceFSRuntime` resource. Next, we will create `JuiceFSRuntime` resource.
+
+**Check `JuiceFSRuntime` resource to be create**
+
+```yaml
+$ cat<<EOF >runtime.yaml
+apiVersion: data.fluid.io/v1alpha1
+kind: JuiceFSRuntime
+metadata:
+  name: jfsdemo
+spec:
+  replicas: 1
+  tieredstore:
+    levels:
+      - mediumtype: MEM
+        path: /dev/shm
+        quota: 40960
+        low: "0.1"
+EOF
+```
+
+> Note: The smallest unit of `quota` in JuiceFS is the MiB
+
+**Create `JuiceFSRuntime`**
+
+```shell
+$ kubectl create -f runtime.yaml
+juicefsruntime.data.fluid.io/jfsdemo created
+```
+
+**Check `JuiceFSRuntime`**
+```shell
+$ kubectl get juicefsruntime
+NAME      AGE
+jfsdemo   34s
+```
+
+Wait a while for the various components of `JuiceFSRuntime` to start smoothly, and you will see status similar to the following:
+
+```shell
+$ kubectl get po |grep jfs
+jfsdemo-worker-0                                           1/1     Running   0          4m2s
+```
+
+`JuiceFSRuntime` does not have master, but the FUSE component implements lazy startup and will be created when the pod is used. The worker of JuiceFS cloud service edition provides distributed independent cache.
+
+```shell
+$ kubectl get juicefsruntime jfsdemo
+NAME      AGE
+jfsdemo   6m13s
+```
+
+Then, check the `Dataset` status again and find that it has been bound with `JuiceFSRuntime`.
+
+```shell
+$ kubectl get dataset jfsdemo
+NAME      UFS TOTAL SIZE   CACHED   CACHE CAPACITY   CACHED PERCENTAGE   PHASE   AGE
+jfsdemo   4.00KiB          -        40.00GiB         -                   Bound   9m28s
+```
+
+**Check Pod to be create**, the Pod uses the `Dataset` created above to specify the PVC with the same name.
+
+```yaml
+$ cat<<EOF >sample.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo-app
+spec:
+  containers:
+    - name: demo
+      image: nginx
+      volumeMounts:
+        - mountPath: /data
+          name: demo
+  volumes:
+    - name: demo
+      persistentVolumeClaim:
+        claimName: jfsdemo
+EOF
+```
+
+**Create Pod**
+
+```shell
+$ kubectl create -f sample.yaml
+pod/demo-app created
+```
+
+**Check Pod**
+```shell
+$ kubectl get po |grep demo
+demo-app                                                       1/1     Running   0          31s
+jfsdemo-fuse-fx7np                                             1/1     Running   0          31s
+jfsdemo-worker-0                                               1/1     Running   0          10m
 ```
 
 You can see that the pod has been created successfully, and the FUSE component of JuiceFS has also started successfully.

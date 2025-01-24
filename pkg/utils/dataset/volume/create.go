@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Author.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,11 +18,13 @@ package volume
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-logr/logr"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
+	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
@@ -41,6 +44,11 @@ func CreatePersistentVolumeForRuntime(client client.Client,
 		return err
 	}
 
+	storageCapacity, err := utils.GetPVCStorageCapacityOfDataset(client, runtime.GetName(), runtime.GetNamespace())
+	if err != nil {
+		return err
+	}
+
 	pvName := runtime.GetPersistentVolumeName()
 
 	found, err := kubeclient.IsPersistentVolumeExist(client, pvName, common.ExpectedFluidAnnotations)
@@ -49,23 +57,24 @@ func CreatePersistentVolumeForRuntime(client client.Client,
 	}
 
 	if !found {
-		pv := &v1.PersistentVolume{
+		pv := &corev1.PersistentVolume{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      pvName,
 				Namespace: runtime.GetNamespace(),
 				Labels: map[string]string{
-					runtime.GetCommonLabelName(): "true",
+					runtime.GetCommonLabelName():    "true",
+					common.LabelAnnotationDatasetId: utils.GetDatasetId(runtime.GetNamespace(), runtime.GetName(), runtime.GetOwnerDatasetUID()),
 				},
 				Annotations: common.ExpectedFluidAnnotations,
 			},
-			Spec: v1.PersistentVolumeSpec{
+			Spec: corev1.PersistentVolumeSpec{
 				AccessModes: accessModes,
-				Capacity: v1.ResourceList{
-					v1.ResourceName(v1.ResourceStorage): resource.MustParse("100Gi"),
+				Capacity: corev1.ResourceList{
+					corev1.ResourceName(corev1.ResourceStorage): storageCapacity,
 				},
 				StorageClassName: common.FluidStorageClass,
-				PersistentVolumeSource: v1.PersistentVolumeSource{
-					CSI: &v1.CSIPersistentVolumeSource{
+				PersistentVolumeSource: corev1.PersistentVolumeSource{
+					CSI: &corev1.CSIPersistentVolumeSource{
 						Driver:       common.CSIDriver,
 						VolumeHandle: pvName,
 						VolumeAttributes: map[string]string{
@@ -94,50 +103,78 @@ func CreatePersistentVolumeForRuntime(client client.Client,
 			},
 		}
 
-		global, nodeSelector := runtime.GetFuseDeployMode()
-		if global {
-			log.Info("Enable global mode for fuse in volume")
-			if len(nodeSelector) > 0 {
-				nodeSelectorRequirements := []v1.NodeSelectorRequirement{}
-				for key, value := range nodeSelector {
-					nodeSelectorRequirements = append(nodeSelectorRequirements, v1.NodeSelectorRequirement{
-						Key:      key,
-						Operator: v1.NodeSelectorOpIn,
-						Values:   []string{value},
-					})
-				}
-				pv.Spec.NodeAffinity = &v1.VolumeNodeAffinity{
-					Required: &v1.NodeSelector{
-						NodeSelectorTerms: []v1.NodeSelectorTerm{
-							{
-								MatchExpressions: nodeSelectorRequirements,
-							},
-						},
-					},
-				}
+		nodeSelector := runtime.GetFuseNodeSelector()
+		log.Info("Enable global mode for fuse in volume")
+		if len(nodeSelector) > 0 {
+			nodeSelectorRequirements := []corev1.NodeSelectorRequirement{}
+			for key, value := range nodeSelector {
+				nodeSelectorRequirements = append(nodeSelectorRequirements, corev1.NodeSelectorRequirement{
+					Key:      key,
+					Operator: corev1.NodeSelectorOpIn,
+					Values:   []string{value},
+				})
 			}
-		} else {
-			log.Info("Disable global mode for fuse in volume")
-			pv.Spec.NodeAffinity = &v1.VolumeNodeAffinity{
-				Required: &v1.NodeSelector{
-					NodeSelectorTerms: []v1.NodeSelectorTerm{
+			pv.Spec.NodeAffinity = &corev1.VolumeNodeAffinity{
+				Required: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{
 						{
-							MatchExpressions: []v1.NodeSelectorRequirement{
-								{
-									Key:      runtime.GetCommonLabelName(),
-									Operator: v1.NodeSelectorOpIn,
-									Values:   []string{"true"},
-								},
-							},
+							MatchExpressions: nodeSelectorRequirements,
 						},
 					},
 				},
 			}
 		}
 
+		// set from runtime
+		for key, value := range runtime.GetAnnotations() {
+			if key == common.AnnotationSkipCheckMountReadyTarget {
+				pv.Spec.PersistentVolumeSource.CSI.VolumeAttributes[common.AnnotationSkipCheckMountReadyTarget] = value
+			}
+		}
+
+		// set from annotations[data.fluid.io/metadataList]
+		metadataList := runtime.GetMetadataList()
+		for i := range metadataList {
+			if selector := metadataList[i].Selector; selector.Group != corev1.GroupName || selector.Kind != "PersistentVolume" {
+				continue
+			}
+			pv.Labels = utils.UnionMapsWithOverride(pv.Labels, metadataList[i].Labels)
+			pv.Annotations = utils.UnionMapsWithOverride(pv.Annotations, metadataList[i].Annotations)
+			// if pv labels has common.LabelNodePublishMethod and it's value is symlink, add to volumeAttributes
+			if v, ok := metadataList[i].Labels[common.LabelNodePublishMethod]; ok && v == common.NodePublishMethodSymlink {
+				pv.Spec.PersistentVolumeSource.CSI.VolumeAttributes[common.NodePublishMethod] = v
+			}
+		}
+
 		err = client.Create(context.TODO(), pv)
 		if err != nil {
 			return err
+		}
+
+		// Poll the PV's status until it enters an "Available" phase. The polling process timeouts after 1 second and retries every 200 milliseconds.
+		timeoutCtx, cancelFn := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancelFn()
+		pollErr := wait.PollUntilContextCancel(timeoutCtx, 200*time.Millisecond, true, func(ctx context.Context) (done bool, err error) {
+			pvCreated, pvErr := kubeclient.GetPersistentVolume(client, pvName)
+			if pvErr != nil {
+				if utils.IgnoreNotFound(pvErr) == nil {
+					log.Info("The persistent volume not found, waiting for cache to sync up", "pv", pvName)
+				} else {
+					log.Error(errors.Wrap(pvErr, "failed to get persistent volume"), "pv", pvName)
+				}
+				// Ignore pvErr to retry
+				return false, nil
+			}
+
+			if pvCreated.Status.Phase == corev1.VolumeAvailable {
+				log.Info("Persistent volume already entered phase Available", "pv", pvName)
+				return true, nil
+			}
+
+			return false, nil
+		})
+		if pollErr != nil {
+			log.Error(pollErr, "got error when polling PV's status", "pv", pvName)
 		}
 	} else {
 		log.Info("The persistent volume is created", "name", pvName)
@@ -155,22 +192,28 @@ func CreatePersistentVolumeClaimForRuntime(client client.Client,
 		return err
 	}
 
+	storageCapacity, err := utils.GetPVCStorageCapacityOfDataset(client, runtime.GetName(), runtime.GetNamespace())
+	if err != nil {
+		return err
+	}
+
 	found, err := kubeclient.IsPersistentVolumeClaimExist(client, runtime.GetName(), runtime.GetNamespace(), common.ExpectedFluidAnnotations)
 	if err != nil {
 		return err
 	}
 
 	if !found {
-		pvc := &v1.PersistentVolumeClaim{
+		pvc := &corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      runtime.GetName(),
 				Namespace: runtime.GetNamespace(),
 				Labels: map[string]string{
-					runtime.GetCommonLabelName(): "true",
+					runtime.GetCommonLabelName():    "true",
+					common.LabelAnnotationDatasetId: utils.GetDatasetId(runtime.GetNamespace(), runtime.GetName(), runtime.GetOwnerDatasetUID()),
 				},
 				Annotations: common.ExpectedFluidAnnotations,
 			},
-			Spec: v1.PersistentVolumeClaimSpec{
+			Spec: corev1.PersistentVolumeClaimSpec{
 				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						runtime.GetCommonLabelName(): "true",
@@ -178,12 +221,20 @@ func CreatePersistentVolumeClaimForRuntime(client client.Client,
 				},
 				StorageClassName: &common.FluidStorageClass,
 				AccessModes:      accessModes,
-				Resources: v1.ResourceRequirements{
-					Requests: v1.ResourceList{
-						v1.ResourceName(v1.ResourceStorage): resource.MustParse("100Gi"),
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: storageCapacity,
 					},
 				},
 			},
+		}
+		metadataList := runtime.GetMetadataList()
+		for i := range metadataList {
+			if selector := metadataList[i].Selector; selector.Group != corev1.GroupName || selector.Kind != "PersistentVolumeClaim" {
+				continue
+			}
+			pvc.Labels = utils.UnionMapsWithOverride(pvc.Labels, metadataList[i].Labels)
+			pvc.Annotations = utils.UnionMapsWithOverride(pvc.Annotations, metadataList[i].Annotations)
 		}
 
 		err = client.Create(context.TODO(), pvc)

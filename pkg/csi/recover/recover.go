@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Fluid Authors.
+Copyright 2022 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,7 +18,11 @@ package recover
 
 import (
 	"context"
-	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/dataset/volume"
@@ -26,55 +30,43 @@ import (
 	"github.com/fluid-cloudnative/fluid/pkg/utils/mountinfo"
 	"github.com/golang/glog"
 	"github.com/pkg/errors"
-	"io/ioutil"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 	k8sexec "k8s.io/utils/exec"
 	"k8s.io/utils/mount"
-	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"strconv"
-	"strings"
-	"time"
 )
 
 const (
-	defaultKubeletTimeout     = 10
-	defaultFuseRecoveryPeriod = 5 * time.Second
-	serviceAccountTokenFile   = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-	FuseRecoveryPeriod        = "RECOVER_FUSE_PERIOD"
+	defaultKubeletTimeout          = 10
+	defaultFuseRecoveryPeriod      = 5 * time.Second
+	defaultRecoverWarningThreshold = 50
+	serviceAccountTokenFile        = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	FuseRecoveryPeriod             = "RECOVER_FUSE_PERIOD"
+	RecoverWarningThreshold        = "RECOVER_WARNING_THRESHOLD"
 )
 
 var _ manager.Runnable = &FuseRecover{}
 
 type FuseRecover struct {
 	mount.SafeFormatAndMount
-	KubeClient    client.Client
-	ApiReader     client.Reader
-	KubeletClient *kubelet.KubeletClient
-	Recorder      record.EventRecorder
+	KubeClient client.Client
+	ApiReader  client.Reader
+	// KubeletClient *kubelet.KubeletClient
+	Recorder record.EventRecorder
 
-	containers map[string]*containerStat // key: <containerName>-<daemonSetName>-<namespace>
+	recoverFusePeriod       time.Duration
+	recoverWarningThreshold int
 
-	recoverFusePeriod time.Duration
-}
-
-type containerStat struct {
-	name          string
-	podName       string
-	namespace     string
-	daemonSetName string
-	startAt       metav1.Time
+	locks *utils.VolumeLocks
 }
 
 func initializeKubeletClient() (*kubelet.KubeletClient, error) {
 	// get CSI sa token
-	tokenByte, err := ioutil.ReadFile(serviceAccountTokenFile)
+	tokenByte, err := os.ReadFile(serviceAccountTokenFile)
 	if err != nil {
 		return nil, errors.Wrap(err, "in cluster mode, find token failed")
 	}
@@ -112,7 +104,7 @@ func initializeKubeletClient() (*kubelet.KubeletClient, error) {
 	return kubeletClient, nil
 }
 
-func NewFuseRecover(kubeClient client.Client, recorder record.EventRecorder, apiReader client.Reader) (*FuseRecover, error) {
+func NewFuseRecover(kubeClient client.Client, recorder record.EventRecorder, apiReader client.Reader, locks *utils.VolumeLocks) (*FuseRecover, error) {
 	glog.V(3).Infoln("start csi recover")
 	mountRoot, err := utils.GetMountRoot()
 	if err != nil {
@@ -124,29 +116,22 @@ func NewFuseRecover(kubeClient client.Client, recorder record.EventRecorder, api
 		return nil, errors.Wrap(err, "got error when creating kubelet client")
 	}
 
-	kubeletClient, err := initializeKubeletClient()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to initialize kubelet")
-	}
-
-	recoverFusePeriod := defaultFuseRecoveryPeriod
-	if os.Getenv(FuseRecoveryPeriod) != "" {
-		recoverFusePeriod, err = time.ParseDuration(os.Getenv(FuseRecoveryPeriod))
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to parse time period")
-		}
+	recoverFusePeriod := utils.GetDurationValueFromEnv(FuseRecoveryPeriod, defaultFuseRecoveryPeriod)
+	recoverWarningThreshold, found := utils.GetIntValueFromEnv(RecoverWarningThreshold)
+	if !found {
+		recoverWarningThreshold = defaultRecoverWarningThreshold
 	}
 	return &FuseRecover{
 		SafeFormatAndMount: mount.SafeFormatAndMount{
 			Interface: mount.New(""),
 			Exec:      k8sexec.New(),
 		},
-		KubeClient:        kubeClient,
-		ApiReader:         apiReader,
-		KubeletClient:     kubeletClient,
-		Recorder:          recorder,
-		containers:        make(map[string]*containerStat),
-		recoverFusePeriod: recoverFusePeriod,
+		KubeClient:              kubeClient,
+		ApiReader:               apiReader,
+		Recorder:                recorder,
+		recoverFusePeriod:       recoverFusePeriod,
+		recoverWarningThreshold: recoverWarningThreshold,
+		locks:                   locks,
 	}, nil
 }
 
@@ -166,30 +151,10 @@ func (r *FuseRecover) run(stopCh <-chan struct{}) {
 }
 
 func (r *FuseRecover) runOnce() {
-	pods, err := r.KubeletClient.GetNodeRunningPods()
-	glog.V(6).Info("get pods from kubelet")
-	if err != nil {
-		glog.Error(err)
-		return
-	}
-	for _, pod := range pods.Items {
-		glog.V(6).Infof("get pod: %s, namespace: %s", pod.Name, pod.Namespace)
-		if !utils.IsFusePod(pod) {
-			continue
-		}
-		if !podutil.IsPodReady(&pod) {
-			continue
-		}
-		glog.V(6).Infof("get fluid fuse pod: %s, namespace: %s", pod.Name, pod.Namespace)
-		if isRestarted := r.compareOrRecordContainerStat(pod); isRestarted {
-			glog.V(3).Infof("fuse pod restarted: %s, namespace: %s", pod.Name, pod.Namespace)
-			r.recover()
-			return
-		}
-	}
+	r.recover()
 }
 
-func (r FuseRecover) recover() {
+func (r *FuseRecover) recover() {
 	brokenMounts, err := mountinfo.GetBrokenMountPoints()
 	if err != nil {
 		glog.Error(err)
@@ -197,27 +162,20 @@ func (r FuseRecover) recover() {
 	}
 
 	for _, point := range brokenMounts {
-		glog.V(4).Infof("Get broken mount point: %v", point)
-		r.umountDuplicate(point)
-		if err := r.recoverBrokenMount(point); err != nil {
-			r.eventRecord(point, corev1.EventTypeWarning, common.FuseRecoverFailed)
-			continue
-		}
-		r.eventRecord(point, corev1.EventTypeNormal, common.FuseRecoverSucceed)
+		r.doRecover(point)
 	}
 }
 
 func (r *FuseRecover) recoverBrokenMount(point mountinfo.MountPoint) (err error) {
-	glog.V(3).Infof("Start recovery: [%s], source path: [%s]", point.MountPath, point.SourcePath)
 	// recovery for each bind mount path
 	mountOption := []string{"bind"}
 	if point.ReadOnly {
 		mountOption = append(mountOption, "ro")
 	}
 
-	glog.V(3).Infof("Start exec cmd: mount %s %s -o %v \n", point.SourcePath, point.MountPath, mountOption)
+	glog.V(3).Infof("FuseRecovery: Start exec cmd: mount %s %s -o %v \n", point.SourcePath, point.MountPath, mountOption)
 	if err := r.Mount(point.SourcePath, point.MountPath, "none", mountOption); err != nil {
-		glog.Errorf("exec cmd: mount -o bind %s %s err :%v", point.SourcePath, point.MountPath, err)
+		glog.Errorf("FuseRecovery: exec cmd: mount -o bind %s %s with err :%v", point.SourcePath, point.MountPath, err)
 	}
 	return
 }
@@ -227,53 +185,11 @@ func (r *FuseRecover) recoverBrokenMount(point mountinfo.MountPoint) (err error)
 // don't umount all item, 'mountPropagation' will lose efficacy.
 func (r *FuseRecover) umountDuplicate(point mountinfo.MountPoint) {
 	for i := point.Count; i > 1; i-- {
-		glog.V(3).Infof("count: %d, start exec cmd: umount %s", i, point.MountPath)
+		glog.V(3).Infof("FuseRecovery: count: %d, start exec cmd: umount %s", i, point.MountPath)
 		if err := r.Unmount(point.MountPath); err != nil {
-			glog.Errorf("exec cmd: umount %s err: %v", point.MountPath, err)
+			glog.Errorf("FuseRecovery: exec cmd: umount %s with err: %v", point.MountPath, err)
 		}
 	}
-}
-
-func (r *FuseRecover) compareOrRecordContainerStat(pod corev1.Pod) (restarted bool) {
-	if pod.Status.ContainerStatuses == nil || len(pod.OwnerReferences) == 0 {
-		return
-	}
-	var dsName string
-	for _, obj := range pod.OwnerReferences {
-		if obj.Kind == "DaemonSet" {
-			dsName = obj.Name
-		}
-	}
-	if dsName == "" {
-		return
-	}
-	for _, cn := range pod.Status.ContainerStatuses {
-		if cn.State.Running == nil {
-			continue
-		}
-		key := fmt.Sprintf("%s-%s-%s", cn.Name, dsName, pod.Namespace)
-		cs, ok := r.containers[key]
-		if !ok {
-			cs = &containerStat{
-				name:          cn.Name,
-				podName:       pod.Name,
-				namespace:     pod.Namespace,
-				daemonSetName: dsName,
-				startAt:       cn.State.Running.StartedAt,
-			}
-			r.containers[key] = cs
-			continue
-		}
-
-		if cs.startAt.Before(&cn.State.Running.StartedAt) {
-			glog.Infof("Container %s of pod %s in namespace %s start time is %s, but record %s",
-				cn.Name, pod.Name, pod.Namespace, cn.State.Running.StartedAt.String(), cs.startAt.String())
-			r.containers[key].startAt = cn.State.Running.StartedAt
-			restarted = true
-			return
-		}
-	}
-	return
 }
 
 func (r *FuseRecover) eventRecord(point mountinfo.MountPoint, eventType, eventReason string) {
@@ -295,5 +211,61 @@ func (r *FuseRecover) eventRecord(point mountinfo.MountPoint, eventType, eventRe
 		return
 	}
 	glog.V(4).Infof("record to dataset: %s, namespace: %s", dataset.Name, dataset.Namespace)
-	r.Recorder.Eventf(dataset, eventType, eventReason, "Fuse recover %s succeed", point.MountPath)
+	switch eventReason {
+	case common.FuseRecoverSucceed:
+		r.Recorder.Eventf(dataset, eventType, eventReason, "Fuse recover %s succeed", point.MountPath)
+	case common.FuseRecoverFailed:
+		r.Recorder.Eventf(dataset, eventType, eventReason, "Fuse recover %s failed", point.MountPath)
+	case common.FuseUmountDuplicate:
+		r.Recorder.Eventf(dataset, eventType, eventReason, "Mountpoint %s has been mounted %v times, unmount duplicate mountpoint to avoid large /proc/self/mountinfo file, this may potential make data access connection broken", point.MountPath, point.Count)
+	}
+}
+
+func (r *FuseRecover) shouldRecover(mountPath string) (should bool, err error) {
+	mounter := mount.New("")
+	notMount, err := mounter.IsLikelyNotMountPoint(mountPath)
+	if os.IsNotExist(err) || (err == nil && notMount) {
+		// Perhaps the mountPath has been cleaned up in other goroutine
+		return false, nil
+	}
+	if err != nil && !mount.IsCorruptedMnt(err) {
+		// unexpected error
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (r *FuseRecover) doRecover(point mountinfo.MountPoint) {
+	if lock := r.locks.TryAcquire(point.MountPath); !lock {
+		glog.V(4).Infof("FuseRecovery: fail to acquire lock on path %s, skip recovering it", point.MountPath)
+		return
+	}
+	defer r.locks.Release(point.MountPath)
+
+	should, err := r.shouldRecover(point.MountPath)
+	if err != nil {
+		glog.Warningf("FuseRecovery: found path %s which is unable to recover due to error %v, skip it", point.MountPath, err)
+		return
+	}
+
+	if !should {
+		glog.V(3).Infof("FuseRecovery: path %s has already been cleaned up, skip recovering it", point.MountPath)
+		return
+	}
+
+	glog.V(3).Infof("FuseRecovery: recovering broken mount point: %v", point)
+	// if app container restart, umount duplicate mount may lead to recover successes but can not access data
+	// so we only umountDuplicate when it has mounted more than the recoverWarningThreshold
+	// please refer to https://github.com/fluid-cloudnative/fluid/issues/3399 for more information
+	if point.Count > r.recoverWarningThreshold {
+		glog.Warningf("FuseRecovery: Mountpoint %s has been mounted %v times, exceeding the recoveryWarningThreshold %v, unmount duplicate mountpoint to avoid large /proc/self/mountinfo file, this may potentially make data access connection broken", point.MountPath, point.Count, r.recoverWarningThreshold)
+		r.eventRecord(point, corev1.EventTypeWarning, common.FuseUmountDuplicate)
+		r.umountDuplicate(point)
+	}
+	if err := r.recoverBrokenMount(point); err != nil {
+		r.eventRecord(point, corev1.EventTypeWarning, common.FuseRecoverFailed)
+		return
+	}
+	r.eventRecord(point, corev1.EventTypeNormal, common.FuseRecoverSucceed)
 }

@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Author.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,14 +20,15 @@ import (
 	"context"
 	"fmt"
 
+	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 
 	"sort"
 	"strings"
-	"time"
 
 	"k8s.io/client-go/util/retry"
 
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base/portallocator"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/dataset/lifecycle"
@@ -40,7 +42,11 @@ import (
 
 // shut down the Alluxio engine
 func (e *AlluxioEngine) Shutdown() (err error) {
-	if e.retryShutdown < e.gracefulShutdownLimits {
+	gracefulShutdownLimits, err := e.getGracefulShutdownLimits()
+	if err != nil {
+		return
+	}
+	if e.retryShutdown < gracefulShutdownLimits {
 		err = e.cleanupCache()
 		if err != nil {
 			e.retryShutdown = e.retryShutdown + 1
@@ -52,7 +58,7 @@ func (e *AlluxioEngine) Shutdown() (err error) {
 	}
 
 	if e.MetadataSyncDoneCh != nil {
-		close(e.MetadataSyncDoneCh)
+		base.SafeClose(e.MetadataSyncDoneCh)
 	}
 
 	_, err = e.destroyWorkers(-1)
@@ -65,16 +71,26 @@ func (e *AlluxioEngine) Shutdown() (err error) {
 		return
 	}
 
-	err = e.releasePorts()
+	// There is no need to release the ports in container network mode
+	runtime, err := e.getRuntime()
 	if err != nil {
-		return
+		return err
+	}
+	if datav1alpha1.IsHostNetwork(runtime.Spec.Master.NetworkMode) ||
+		datav1alpha1.IsHostNetwork(runtime.Spec.Worker.NetworkMode) {
+		e.Log.Info("releasePorts for hostnetwork mode")
+		err = e.releasePorts()
+		if err != nil {
+			return
+		}
+	} else {
+		e.Log.Info("skip releasePorts for container network mode")
 	}
 
-	err = e.cleanAll()
-	return err
+	return e.cleanAll()
 }
 
-// destroyMaster Destroies the master
+// destroyMaster Destroys the master
 func (e *AlluxioEngine) destroyMaster() (err error) {
 	var found bool
 	found, err = helm.CheckRelease(e.name, e.namespace)
@@ -100,6 +116,9 @@ func (e *AlluxioEngine) destroyMaster() (err error) {
 func (e *AlluxioEngine) cleanupCache() (err error) {
 	// TODO(cheyang): clean up the cache
 	cacheStates, err := e.queryCacheStatus()
+	if utils.IgnoreNotFound(err) != nil {
+		return err
+	}
 	if cacheStates.cached == "" {
 		return
 	}
@@ -132,26 +151,12 @@ func (e *AlluxioEngine) cleanupCache() (err error) {
 		e.Log.Info("Clean up the cache successfully")
 	}
 
-	time.Sleep(time.Duration(10 * time.Second))
-
-	// ufs, cached, cachedPercentage, err = e.du()
-	// if err != nil {
-	// 	return
-	// }
-
-	// e.Log.Info("The cache after cleanup", "ufs", ufs,
-	// 	"cached", cached,
-	// 	"cachedPercentage", cachedPercentage)
-
-	// if cached > 0 {
-	// 	return fmt.Errorf("The remaining cached is not cleaned up, it still has %d", cached)
-	// }
-
-	return fmt.Errorf("the remaining cached is not cleaned up, check again")
+	// time.Sleep(time.Duration(5 * time.Second))
+	return fmt.Errorf("to make sure if the remaining cache is cleaned up, check again")
 }
 
 func (e *AlluxioEngine) releasePorts() (err error) {
-	var valueConfigMapName = e.getConfigmapName()
+	var valueConfigMapName = e.getHelmValuesConfigMapName()
 
 	allocator, err := portallocator.GetRuntimePortAllocator()
 	if err != nil {
@@ -165,6 +170,7 @@ func (e *AlluxioEngine) releasePorts() (err error) {
 
 	// The value configMap is not found
 	if cm == nil {
+		e.Log.Info("value configMap not found, there might be some unreleased ports", "valueConfigMapName", valueConfigMapName)
 		return nil
 	}
 
@@ -187,7 +193,7 @@ func (e *AlluxioEngine) cleanAll() (err error) {
 	e.Log.Info("clean up fuse count", "n", count)
 
 	var (
-		valueConfigmapName = e.name + "-" + e.runtimeType + "-values"
+		valueConfigmapName = e.getHelmValuesConfigMapName()
 		configmapName      = e.name + "-config"
 		namespace          = e.namespace
 	)
@@ -252,14 +258,7 @@ func (e *AlluxioEngine) destroyWorkers(expectedWorkers int32) (currentWorkers in
 	if expectedWorkers >= 0 {
 		e.Log.Info("Scale in Alluxio workers", "expectedWorkers", expectedWorkers)
 		// This is a scale in operation
-		runtimeInfo, err := e.getRuntimeInfo()
-		if err != nil {
-			e.Log.Error(err, "getRuntimeInfo when scaling in")
-			return currentWorkers, err
-		}
-
-		fuseGlobal, _ := runtimeInfo.GetFuseDeployMode()
-		nodes, err = e.sortNodesToShutdown(nodeList.Items, fuseGlobal)
+		nodes, err = e.sortNodesToShutdown(nodeList.Items)
 		if err != nil {
 			return currentWorkers, err
 		}
@@ -284,7 +283,7 @@ func (e *AlluxioEngine) destroyWorkers(expectedWorkers int32) (currentWorkers in
 		err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 			node, err := kubeclient.GetNode(e.Client, nodeName)
 			if err != nil {
-				e.Log.Error(err, "Fail to get node", "nodename", nodeName)
+				e.Log.Error(err, "Fail to get node", "nodeName", nodeName)
 				return err
 			}
 
@@ -293,7 +292,7 @@ func (e *AlluxioEngine) destroyWorkers(expectedWorkers int32) (currentWorkers in
 				labelsToModify.Delete(label)
 			}
 
-			exclusiveLabelValue := utils.GetExclusiveValue(e.namespace, e.name)
+			exclusiveLabelValue := runtimeInfo.GetExclusiveLabelValue()
 			if val, exist := toUpdate.Labels[labelExclusiveName]; exist && val == exclusiveLabelValue {
 				labelsToModify.Delete(labelExclusiveName)
 			}
@@ -323,27 +322,10 @@ func (e *AlluxioEngine) destroyWorkers(expectedWorkers int32) (currentWorkers in
 	return currentWorkers, nil
 }
 
-func (e *AlluxioEngine) sortNodesToShutdown(candidateNodes []corev1.Node, fuseGlobal bool) (nodes []corev1.Node, err error) {
-	if !fuseGlobal {
-		// If fuses are deployed in non-global mode, workers and fuses will be scaled in together.
-		// It can be dangerous if we scale in nodes where there are pods using the related pvc.
-		// So firstly we filter out such nodes
-		pvcMountNodes, err := kubeclient.GetPvcMountNodes(e.Client, e.name, e.namespace)
-		if err != nil {
-			e.Log.Error(err, "GetPvcMountNodes when scaling in")
-			return nil, err
-		}
-
-		for _, node := range candidateNodes {
-			if _, found := pvcMountNodes[node.Name]; !found {
-				nodes = append(nodes, node)
-			}
-		}
-	} else {
-		// If fuses are deployed in global mode. Scaling in workers has nothing to do with fuses.
-		// All nodes with related label can be candidate nodes.
-		nodes = candidateNodes
-	}
+func (e *AlluxioEngine) sortNodesToShutdown(candidateNodes []corev1.Node) (nodes []corev1.Node, err error) {
+	// If fuses are deployed in global mode. Scaling in workers has nothing to do with fuses.
+	// All nodes with related label can be candidate nodes.
+	nodes = candidateNodes
 
 	// Prefer to choose nodes with less data cache.
 	// Since this is just a preference, anything unexpected will be ignored.

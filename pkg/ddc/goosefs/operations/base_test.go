@@ -6,7 +6,7 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
     http://www.apache.org/licenses/LICENSE-2.0
-	
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,8 +24,8 @@ import (
 	"testing"
 
 	"github.com/brahma-adshonor/gohook"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -33,6 +33,7 @@ const (
 	OTHER_ERR      = "other-err"
 	FINE           = "fine"
 	EXEC_ERR       = "exec-err"
+	NEGATIVE_RES   = "negative-res"
 	TOO_MANY_LINES = "too many lines"
 	DATA_NUM       = "data nums not match"
 	PARSE_ERR      = "parse err"
@@ -43,9 +44,9 @@ func TestNewGooseFSFileUtils(t *testing.T) {
 		podName:   "hbase",
 		namespace: "default",
 		container: "hbase-container",
-		log:       logf.NullLogger{},
+		log:       fake.NullLogger(),
 	}
-	result := NewGooseFSFileUtils("hbase", "hbase-container", "default", logf.NullLogger{})
+	result := NewGooseFSFileUtils("hbase", "hbase-container", "default", fake.NullLogger())
 	if !reflect.DeepEqual(expectedResult, result) {
 		t.Errorf("fail to create the GooseFSFileUtils, want: %v, got: %v", expectedResult, result)
 	}
@@ -87,7 +88,7 @@ func TestGooseFSFileUtils_IsExist(t *testing.T) {
 		{FINE, true, true},
 	}
 	for _, test := range tests {
-		found, err := GooseFSFileUtils{log: logf.NullLogger{}}.IsExist(test.in)
+		found, err := GooseFSFileUtils{log: fake.NullLogger()}.IsExist(test.in)
 		if found != test.out {
 			t.Errorf("input parameter is %s,expected %t, got %t", test.in, test.out, found)
 		}
@@ -140,7 +141,7 @@ func TestGooseFSFileUtils_Du(t *testing.T) {
 		{FINE, int64(out1), int64(out2), out3, true},
 	}
 	for _, test := range tests {
-		o1, o2, o3, err := GooseFSFileUtils{log: logf.NullLogger{}}.Du(test.in)
+		o1, o2, o3, err := GooseFSFileUtils{log: fake.NullLogger()}.Du(test.in)
 		var noErr bool = (err == nil)
 		if test.noErr != noErr {
 			t.Errorf("input parameter is %s,expected noerr is %t", test.in, test.noErr)
@@ -207,7 +208,7 @@ func TestLoadMetadataWithoutTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := GooseFSFileUtils{log: logf.NullLogger{}}
+	a := GooseFSFileUtils{log: fake.NullLogger()}
 	err = a.LoadMetadataWithoutTimeout("/")
 	if err == nil {
 		t.Error("check failure, want err, got nil")
@@ -243,7 +244,7 @@ func TestLoadMetaData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := GooseFSFileUtils{log: logf.NullLogger{}}
+	a := GooseFSFileUtils{log: fake.NullLogger()}
 	err = a.LoadMetaData("/", true)
 	if err == nil {
 		t.Error("check failure, want err, got nil")
@@ -279,7 +280,7 @@ func TestQueryMetaDataInfoIntoFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := GooseFSFileUtils{log: logf.NullLogger{}}
+	a := GooseFSFileUtils{log: fake.NullLogger()}
 
 	keySets := []KeyOfMetaDataFile{DatasetName, Namespace, UfsTotal, FileNum, ""}
 	for index, keySet := range keySets {
@@ -427,7 +428,7 @@ func TestIsMounted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &GooseFSFileUtils{log: logf.NullLogger{}}
+	a := &GooseFSFileUtils{log: fake.NullLogger()}
 	_, err = a.IsMounted("/hbase")
 	if err == nil {
 		t.Error("check failure, want err, got nil")
@@ -484,7 +485,7 @@ func TestReady(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &GooseFSFileUtils{log: logf.NullLogger{}}
+	a := &GooseFSFileUtils{log: fake.NullLogger()}
 	ready := a.Ready()
 	if ready != false {
 		t.Errorf("check failure, want false, got %t", ready)
@@ -520,7 +521,7 @@ func TestDu(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &GooseFSFileUtils{log: logf.NullLogger{}}
+	a := &GooseFSFileUtils{log: fake.NullLogger()}
 	_, _, _, err = a.Du("/hbase")
 	if err == nil {
 		t.Error("check failure, want err, got nil")
@@ -553,6 +554,8 @@ func TestCount(t *testing.T) {
 
 		if strings.Contains(p4[3], EXEC_ERR) {
 			return "does not exist", "", errors.New("exec-error")
+		} else if strings.Contains(p4[3], NEGATIVE_RES) {
+			return "12324\t45463\t-9223372036854775808", "", nil
 		} else if strings.Contains(p4[3], TOO_MANY_LINES) {
 			return "1\n2\n3\n4\n", "1\n2\n3\n4\n", nil
 		} else if strings.Contains(p4[3], DATA_NUM) {
@@ -581,13 +584,14 @@ func TestCount(t *testing.T) {
 		noErr            bool
 	}{
 		{EXEC_ERR, 0, 0, 0, false},
+		{NEGATIVE_RES, 0, 0, 0, false},
 		{TOO_MANY_LINES, 0, 0, 0, false},
 		{DATA_NUM, 0, 0, 0, false},
 		{PARSE_ERR, 0, 0, 0, false},
 		{FINE, int64(out1), int64(out2), int64(out3), true},
 	}
 	for _, test := range tests {
-		o1, o2, o3, err := GooseFSFileUtils{log: logf.NullLogger{}}.Count(test.in)
+		o1, o2, o3, err := GooseFSFileUtils{log: fake.NullLogger()}.Count(test.in)
 		var noErr bool = (err == nil)
 		if test.noErr != noErr {
 			t.Errorf("input parameter is %s,expected noerr is %t", test.in, test.noErr)
@@ -618,7 +622,7 @@ func TestGetFileCount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &GooseFSFileUtils{log: logf.NullLogger{}}
+	a := &GooseFSFileUtils{log: fake.NullLogger()}
 	_, err = a.GetFileCount()
 	if err == nil {
 		t.Error("check failure, want err, got nil")
@@ -658,7 +662,7 @@ func TestReportMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &GooseFSFileUtils{log: logf.NullLogger{}}
+	a := &GooseFSFileUtils{log: fake.NullLogger()}
 
 	_, err = a.ReportMetrics()
 	if err == nil {
@@ -696,7 +700,7 @@ func TestReportCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &GooseFSFileUtils{log: logf.NullLogger{}}
+	a := &GooseFSFileUtils{log: fake.NullLogger()}
 	_, err = a.ReportCapacity()
 	if err == nil {
 		t.Error("check failure, want err, got nil")
@@ -733,7 +737,7 @@ func TestExec(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &GooseFSFileUtils{log: logf.NullLogger{}}
+	a := &GooseFSFileUtils{log: fake.NullLogger()}
 	_, _, err = a.exec([]string{"goosefs", "fsadmin", "report", "capacity"}, false)
 	if err == nil {
 		t.Error("check failure, want err, got nil")
@@ -769,7 +773,7 @@ func TestExecWithoutTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &GooseFSFileUtils{log: logf.NullLogger{}}
+	a := &GooseFSFileUtils{log: fake.NullLogger()}
 	_, _, err = a.execWithoutTimeout([]string{"goosefs", "fsadmin", "report", "capacity"}, false)
 	if err == nil {
 		t.Error("check failure, want err, got nil")
@@ -805,7 +809,7 @@ func TestMasterPodName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &GooseFSFileUtils{log: logf.NullLogger{}}
+	a := &GooseFSFileUtils{log: fake.NullLogger()}
 	_, err = a.MasterPodName()
 	if err == nil {
 		t.Error("check failure, want err, got nil")
@@ -842,7 +846,7 @@ func TestUnMount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &GooseFSFileUtils{log: logf.NullLogger{}}
+	a := &GooseFSFileUtils{log: fake.NullLogger()}
 	err = a.UnMount("/hbase")
 	if err != nil {
 		t.Error("check failure, want err, got nil")

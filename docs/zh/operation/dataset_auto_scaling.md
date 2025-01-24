@@ -9,7 +9,10 @@ Fluid 可以通过创建 Dataset 对象将数据分散到 Kubernetes 计算节�
 本文将向你展示这一特性。
 
 ## 前提条件
-推荐使用 Kubernetes 1.18 以上，因为在 1.18 之前，HPA 是无法自定义扩缩容策略的，都是通过硬编码实现的。而在 1.18 后，用户可以自定义扩缩容策略的，比如可以定义一次扩容后的冷却时间。
+
+1. 推荐使用 Kubernetes 1.18 以上，因为在 1.18 之前，HPA 是无法自定义扩缩容策略的，都是通过硬编码实现的。而在 1.18 后，用户可以自定义扩缩容策略的，比如可以定义一次扩容后的冷却时间。
+
+2. Fluid应该已经被安装了。如果没有，请按照该[文档](../userguide/install.md)进行安装
 
 
 ## 具体步骤
@@ -20,18 +23,16 @@ Fluid 可以通过创建 Dataset 对象将数据分散到 Kubernetes 计算节�
 $ yum install -y jq
 ```
 
-2. 下载、安装 Fluid 最新版
+2. 如果有需要，请下载community示例库
 
 ```shell
-$ git clone https://github.com/fluid-cloudnative/fluid.git
-$ cd fluid/charts
-$ kubectl create ns fluid-system
-$ helm install fluid fluid
+$ git clone https://github.com/fluid-cloudnative/community.git
 ```
 
 3. 部署或配置 Prometheus
 
-这里通过 Prometheus 对于 AlluxioRuntime 的缓存引擎暴露的 Metrics 进行收集，如果集群内无 Prometheus:
+这里通过 Prometheus 对于 AlluxioRuntime 的缓存引擎暴露的 Metrics 进行收集。如果你的集群中没有Prometheus，你可以使用以下示例进行快速尝试。然而，这种方法并不推荐在生产环境中使用。请按照[安装指南](https://prometheus.io/docs/prometheus/latest/installation/)来正确地在你的生产环境中设置Prometheus。
+
 
 ```shell
 $ cd fluid
@@ -84,7 +85,7 @@ prometheus-svc   NodePort   172.16.135.24   <none>        9090:32114/TCP   2m7s
 
 5. 部署 metrics server
 
-检查该集群是否包括 metrics-server, 执行 kubectl top node 有正确输出可以显示内存和 CPU，则该集群 metrics server 配置正确
+检查该集群是否包括 metrics-server, 执行`kubectl top node`有正确输出可以显示内存和 CPU，则该集群 metrics server 配置正确
 
 ```shell
 $ kubectl top node
@@ -94,11 +95,8 @@ NAME                       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%
 192.168.1.206   96m          2%     1689Mi          11%
 ```
 
-否则手动执行以下命令
+否则需要手动安装metrics server
 
-```shell
-$ kubectl create -f integration/metrics-server
-```
 
 6. 部署 custom-metrics-api 组件
 
@@ -132,15 +130,13 @@ data:
       metricsQuery: ceil(Cluster_CapacityUsed{<<.LabelMatchers>>}*100/(Cluster_CapacityTotal{<<.LabelMatchers>>}))
 ```
 
-否则手动执行以下命令
+否则可以通过[metrics server helm chart](https://github.com/helm/charts/tree/master/stable/metrics-server)手动安装。
 
 ```shell
-$ kubectl create -f integration/custom-metrics-api/namespace.yaml
 $ kubectl create -f integration/custom-metrics-api
 ```
 
-
-> 注意：因为 custom-metrics-api 对接集群中的 Prometheous 的访问地址，请替换 Prometheous url 为你真正使用的 Prometheous 地址。
+> 注意：因为 custom-metrics-api 对接集群中的 Prometheus 的访问地址，请替换 Prometheus url 为你真正使用的 Prometheus 地址。
 
 
 检查自定义指标
@@ -424,4 +420,4 @@ $ kubectl delete dataset spark
 
 ## 总结
 
-Fluid提供了结合 Prometheous，Kubernetes HPA 和 Custom Metrics 能力，根据占用缓存空间的比例触发自动弹性伸缩的能力，实现缓存能力的按需使用。这样能够帮助用户更加灵活的使用通过分布式缓存提升数据访问加速能力，后续我们会提供定时扩缩的能力，为扩缩容提供更强的确定性。
+Fluid提供了结合 Prometheus，Kubernetes HPA 和 Custom Metrics 能力，根据占用缓存空间的比例触发自动弹性伸缩的能力，实现缓存能力的按需使用。这样能够帮助用户更加灵活的使用通过分布式缓存提升数据访问加速能力，后续我们会提供定时扩缩的能力，为扩缩容提供更强的确定性。

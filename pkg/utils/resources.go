@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -38,5 +39,39 @@ func TransformRequirementsToResources(res corev1.ResourceRequirements) (cRes com
 		}
 	}
 
+	return
+}
+
+func ResourceRequirementsEqual(source corev1.ResourceRequirements,
+	target corev1.ResourceRequirements) bool {
+	return resourceListsEqual(source.Requests, target.Requests) &&
+		resourceListsEqual(source.Limits, target.Limits)
+}
+
+func resourceListsEqual(a corev1.ResourceList, b corev1.ResourceList) bool {
+	a = withoutZeroElems(a)
+	b = withoutZeroElems(b)
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		vb, found := b[k]
+		if !found {
+			return false
+		}
+		if v.Cmp(vb) != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func withoutZeroElems(input corev1.ResourceList) (output corev1.ResourceList) {
+	output = corev1.ResourceList{}
+	for k, v := range input {
+		if !v.IsZero() {
+			output[k] = v
+		}
+	}
 	return
 }

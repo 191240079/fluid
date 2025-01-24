@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -44,7 +45,7 @@ func (e *AlluxioEngine) transformInitUsers(runtime *datav1alpha1.AlluxioRuntime,
 	tag := runtime.Spec.InitUsers.ImageTag
 	imagePullPolicy := runtime.Spec.InitUsers.ImagePullPolicy
 
-	value.InitUsers.Image, value.InitUsers.ImageTag, value.InitUsers.ImagePullPolicy = docker.ParseInitImage(image, tag, imagePullPolicy, common.DEFAULT_INIT_IMAGE_ENV)
+	value.InitUsers.Image, value.InitUsers.ImageTag, value.InitUsers.ImagePullPolicy = docker.ParseInitImage(image, tag, imagePullPolicy, common.DefaultInitImageEnv)
 
 	e.Log.Info("Check InitUsers", "InitUsers", value.InitUsers)
 

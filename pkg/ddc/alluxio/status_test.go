@@ -17,7 +17,7 @@ import (
 	"reflect"
 	"testing"
 
-	. "github.com/agiledragon/gomonkey"
+	. "github.com/agiledragon/gomonkey/v2"
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
@@ -25,7 +25,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	utilpointer "k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -38,7 +38,7 @@ func TestCheckAndUpdateRuntimeStatus(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(1),
+				Replicas: ptr.To[int32](1),
 			},
 			Status: appsv1.StatefulSetStatus{
 				ReadyReplicas: 1,
@@ -70,7 +70,7 @@ func TestCheckAndUpdateRuntimeStatus(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(3),
+				Replicas: ptr.To[int32](3),
 			},
 			Status: appsv1.StatefulSetStatus{
 				Replicas:      3,

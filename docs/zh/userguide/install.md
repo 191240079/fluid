@@ -3,8 +3,8 @@
 ## 前提条件
 
 - Git
-- Kubernetes集群（version >= 1.16）, 并且支持CSI功能
-- kubectl（version >= 1.16）
+- Kubernetes集群（version >= 1.18）, 并且支持CSI功能
+- kubectl（version >= 1.18）
 - Helm（version >= 3.5）
 
 接下来的文档假设您已经配置好上述所有环境。
@@ -28,12 +28,19 @@
 $ kubectl create ns fluid-system
 ```
 
+为您本地Helm仓库添加并且更新“fluid”源到最新版本
+
+```shell
+$ helm repo add fluid https://fluid-cloudnative.github.io/charts
+$ helm repo update
+```
+
 安装Fluid：
 
 ```shell
-$ helm install fluid fluid.tgz
+$ helm install fluid fluid/fluid
 NAME: fluid
-LAST DEPLOYED: Fri Jul 24 16:10:18 2020
+LAST DEPLOYED: Wed May 24 18:17:16 2023
 NAMESPACE: default
 STATUS: deployed
 REVISION: 1
@@ -44,7 +51,7 @@ TEST SUITE: None
 
 > `helm install`命令的一般格式是`helm install <RELEASE_NAME> <SOURCE>`，在上面的命令中，第一个`fluid`指定了安装的release名字，这可以自行更改，第二个`fluid.tgz`指定了helm chart所在路径。
 
-### 使用Helm将Fluid更新到最新版本(v0.7)
+### 使用Helm将Fluid更新到最新版本
 
 如果您此前已经安装过旧版本的Fluid，可以使用Helm进行更新。
 更新前，建议确保各Runtime资源对象中的各个组件已经顺利启动完成，也就是类似以下状态：
@@ -59,19 +66,12 @@ hbase-worker-bdbjg   2/2     Running   0          9h
 hbase-worker-rznd5   2/2     Running   0          9h
 ```
 
-由于helm upgrade不会更新CRD，需要先对其手动进行更新：
-
-```shell
-$ tar zxvf fluid-0.7.0.tgz ./
-$ kubectl apply -f fluid/crds/.
-```
-
 更新：
 ```shell
-$ helm upgrade fluid fluid/
+$ helm upgrade fluid fluid/fluid
 Release "fluid" has been upgraded. Happy Helming!
 NAME: fluid
-LAST DEPLOYED: Fri Mar 12 09:22:32 2021
+LAST DEPLOYED: Wed May 24 18:27:54 2023
 NAMESPACE: default
 STATUS: deployed
 REVISION: 2
@@ -80,7 +80,7 @@ TEST SUITE: None
 
 > 对于Kubernetes v1.17及以下环境，请使用`helm upgrade --set runtime.criticalFusePod=false fluid fluid/`
 
-> 建议您从v0.6升级到最新版本v0.7。如果您安装的是更旧版本的Fluid，建议重新进行安装。
+> 建议您从v0.7升级到最新版本。如果您安装的是更旧版本的Fluid，建议重新进行安装。
 
 ### 检查各组件状态
 
@@ -88,24 +88,31 @@ TEST SUITE: None
 
 ```shell
 $ kubectl get crd | grep data.fluid.io
-alluxioruntimes.data.fluid.io                          2022-02-28T08:14:45Z
-databackups.data.fluid.io                              2022-02-28T08:14:45Z
-dataloads.data.fluid.io                                2022-02-28T08:14:45Z
-datasets.data.fluid.io                                 2022-02-28T08:14:45Z
-goosefsruntimes.data.fluid.io                          2022-02-28T08:14:45Z
-jindoruntimes.data.fluid.io                            2022-02-28T08:14:45Z
+alluxioruntimes.data.fluid.io                          2023-05-24T10:14:47Z
+databackups.data.fluid.io                              2023-05-24T10:14:47Z
+dataloads.data.fluid.io                                2023-05-24T10:14:47Z
+datamigrates.data.fluid.io                             2023-05-24T10:28:11Z
+datasets.data.fluid.io                                 2023-05-24T10:14:47Z
+efcruntimes.data.fluid.io                              2023-05-24T10:28:12Z
+goosefsruntimes.data.fluid.io                          2023-05-24T10:14:47Z
+jindoruntimes.data.fluid.io                            2023-05-24T10:14:48Z
+juicefsruntimes.data.fluid.io                          2023-05-24T10:14:48Z
+thinruntimeprofiles.data.fluid.io                      2023-05-24T10:28:16Z
+thinruntimes.data.fluid.io                             2023-05-24T10:28:16Z
 ```
 
 **查看各Pod的状态:**
 
 ```shell
 $ kubectl get pod -n fluid-system
-NAME                                         READY   STATUS    RESTARTS   AGE
-alluxioruntime-controller-66bf8cbdf4-k6cxt   1/1     Running   0          6m50s
-csi-nodeplugin-fluid-pq2zd                   2/2     Running   0          4m30s
-csi-nodeplugin-fluid-rkv7h                   2/2     Running   0          6m41s
-dataset-controller-558c5c7785-mtgfh          1/1     Running   0          6m50s
-fluid-webhook-7b6cbf558-lw6lq                1/1     Running   0          6m50s
+NAME                                     READY   STATUS      RESTARTS   AGE
+csi-nodeplugin-fluid-2scs9               2/2     Running     0          50s
+csi-nodeplugin-fluid-7vflb               2/2     Running     0          20s
+csi-nodeplugin-fluid-f9xfv               2/2     Running     0          33s
+dataset-controller-686d9d9cd6-gk6m6      1/1     Running     0          50s
+fluid-crds-upgrade-1.0.0-37e17c6-fp4mm   0/1     Completed   0          74s
+fluid-webhook-5bc9dfb9d8-hdvhk           1/1     Running     0          50s
+fluidapp-controller-6d4cbdcd88-z7l4c     1/1     Running     0          50s
 ```
 
 如果Pod状态如上所示，那么Fluid就可以正常使用了！
@@ -124,12 +131,12 @@ $ kubectl exec dataset-controller-558c5c7785-mtgfh -n fluid-system -- dataset-co
 
 如果版本一致，您将看到如下信息：
 ```
-BuildDate: 2022-02-20_09:43:43
-GitCommit: 808c72e3c5136152690599d187a76849d03ea448
-GitTreeState: dirty
-GoVersion: go1.16.8
-Compiler: gc
-Platform: linux/amd64
+  BuildDate: 2024-03-02_07:35:18
+  GitCommit: 50ee8887239f07592ba74af3e14379efc1487c0c
+  GitTreeState: clean
+  GoVersion: go1.18.10
+  Compiler: gc
+  Platform: linux/amd64
 ```
 
 ### Fluid使用示例
@@ -168,4 +175,42 @@ helm install fluid --set runtime.mountRoot=/var/lib/docker/runtime-mnt fluid
 
 ```
 helm install fluid --set csi.featureGates='FuseRecovery=true' fluid
+```
+
+3. 如果您的Kubernetes集群自定义配置了kubelet root directory，请在安装Fluid时配置KUBELET_ROOTDIR，您可以使用以下命令：
+```shell
+helm install --set csi.kubelet.rootDir=<kubelet-root-dir> \
+  --set csi.kubelet.certDir=<kubelet-root-dir>/pki fluid fluid.tgz
+```
+
+> 您可以在Kubernetes节点上执行如下命令查看--root-dir参数配置情况：
+> ```
+> ps -ef | grep $(which kubelet) | grep root-dir
+> ```
+> 如果上述命令未找到对应结果，则说明kubelet根路径为默认值（/var/lib/kubelet），与Fluid设置的默认值一致。
+
+4. 如果您使用[Sealer](http://sealer.cool)安装Kubernetes集群，Sealer默认会使用`apiserver.cluster.local`作为API Server的地址，并将其写入`kubelet.conf`文件中，同时利用节点本地的`hosts`文件来查找该地址对应的IP地址，这会导致Fluid CSI Plugin无法找到API Server的IP地址。您可以使用如下命令将Fluid CSI Plugin设置为使用hostNetwork:
+```shell
+# 安装
+helm install fluid --set csi.config.hostNetwork=true fluid/fluid
+# 升级
+helm upgrade fluid --set csi.config.hostNetwork=true fluid/fluid
+```
+
+5. 默认配置下，Fluid未对安装的控制器（Controller）组件Pod设置`spec.resources`，如果在生产环境中部署并使用Fluid，推荐根据业务规模对各个控制器组件Pod的`spec.resources`进行设置，不同控制器组件资源配置的字段可参考[values.yaml](https://github.com/fluid-cloudnative/fluid/blob/master/charts/fluid/fluid/values.yaml)文件中的示例。例如，如果需要修改Dataset控制器Pod的资源请求和限制，首先定义以下自定义values文件(e.g. `my-resource-file.yaml`)：
+```yaml
+dataset:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+```
+
+执行以下命令，使用自定义values文件覆盖Fluid Helm Chart中的默认配置：
+
+```shell
+helm upgrade fluid --install -f my-resource-file.yaml fluid/fluid
 ```

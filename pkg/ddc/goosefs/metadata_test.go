@@ -15,16 +15,8 @@ limitations under the License.
 package goosefs
 
 import (
-	"context"
 	"errors"
-	"reflect"
 	"testing"
-	"time"
-
-	. "github.com/agiledragon/gomonkey"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/util/retry"
 
 	"github.com/brahma-adshonor/gohook"
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
@@ -32,7 +24,6 @@ import (
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func TestSyncMetadata(t *testing.T) {
@@ -94,13 +85,13 @@ func TestSyncMetadata(t *testing.T) {
 			name:      "hbase",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 		{
 			name:      "spark",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 	}
 
@@ -115,7 +106,7 @@ func TestSyncMetadata(t *testing.T) {
 		name:      "hadoop",
 		namespace: "fluid",
 		Client:    client,
-		Log:       log.NullLogger{},
+		Log:       fake.NullLogger(),
 	}
 
 	err := gohook.Hook(operations.GooseFSFileUtils.QueryMetaDataInfoIntoFile, QueryMetaDataInfoIntoFileCommon, nil)
@@ -161,13 +152,13 @@ func TestShouldSyncMetadata(t *testing.T) {
 			name:      "hbase",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 		{
 			name:      "spark",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 	}
 
@@ -226,13 +217,13 @@ func TestShouldRestoreMetadata(t *testing.T) {
 			name:      "hbase",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 		{
 			name:      "spark",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 	}
 
@@ -310,13 +301,13 @@ func TestRestoreMetadataInternal(t *testing.T) {
 			name:      "hbase",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 		{
 			name:      "hbase",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 	}
 
@@ -359,136 +350,4 @@ func TestRestoreMetadataInternal(t *testing.T) {
 		}
 	}
 	wrappedUnhookQueryMetaDataInfoIntoFile()
-}
-
-func TestSyncMetadataInternal(t *testing.T) {
-	datasetInputs := []datav1alpha1.Dataset{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "spark",
-				Namespace: "fluid",
-			},
-			Spec: datav1alpha1.DatasetSpec{
-				Mounts: []datav1alpha1.Mount{
-					{
-						MountPoint: "cosn://imagenet-1234567/",
-					},
-				},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "hbase",
-				Namespace: "fluid",
-			},
-			Spec: datav1alpha1.DatasetSpec{},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "hadoop",
-				Namespace: "fluid",
-			},
-			Spec: datav1alpha1.DatasetSpec{},
-		},
-	}
-	testObjs := []runtime.Object{}
-	for _, datasetInput := range datasetInputs {
-		testObjs = append(testObjs, datasetInput.DeepCopy())
-	}
-	client := fake.NewFakeClientWithScheme(testScheme, testObjs...)
-
-	engines := []GooseFSEngine{
-		{
-			name:               "hbase",
-			namespace:          "fluid",
-			Client:             client,
-			Log:                log.NullLogger{},
-			MetadataSyncDoneCh: make(chan MetadataSyncResult),
-		},
-		{
-			name:               "hadoop",
-			namespace:          "fluid",
-			Client:             client,
-			Log:                log.NullLogger{},
-			MetadataSyncDoneCh: nil,
-		},
-	}
-
-	result := MetadataSyncResult{
-		StartTime: time.Now(),
-		UfsTotal:  "2GB",
-		Done:      true,
-		FileNum:   "5",
-	}
-
-	var testCase = []struct {
-		engine           GooseFSEngine
-		expectedResult   bool
-		expectedUfsTotal string
-		expectedFileNum  string
-	}{
-		{
-			engine:           engines[0],
-			expectedUfsTotal: "2GB",
-			expectedFileNum:  "5",
-		},
-		{
-			engine:           engines[1],
-			expectedUfsTotal: "2GB",
-			expectedFileNum:  "1331167",
-		},
-	}
-
-	for index, test := range testCase {
-		if index == 0 {
-			go func() {
-				test.engine.MetadataSyncDoneCh <- result
-			}()
-		}
-
-		if index == 1 {
-			var goosefsFileUtils operations.GooseFSFileUtils
-			patch1 := ApplyMethod(reflect.TypeOf(goosefsFileUtils), "LoadMetadataWithoutTimeout", func(_ operations.GooseFSFileUtils, path string) error {
-				return nil
-			})
-			defer patch1.Reset()
-
-			patch2 := ApplyMethod(reflect.TypeOf(&test.engine), "TotalStorageBytes", func(_ *GooseFSEngine) (int64, error) {
-				return 16, nil
-			})
-			defer patch2.Reset()
-
-			patch3 := ApplyMethod(reflect.TypeOf(&test.engine), "TotalFileNums", func(_ *GooseFSEngine) (int64, error) {
-				return 16, nil
-			})
-			defer patch3.Reset()
-
-			patch4 := ApplyFunc(retry.RetryOnConflict, func(backoff wait.Backoff, fn func() error) error {
-				return nil
-			})
-			defer patch4.Reset()
-		}
-
-		err := test.engine.syncMetadataInternal()
-		if err != nil {
-			t.Errorf("fail to exec the function with error %v", err)
-		}
-
-		key := types.NamespacedName{
-			Namespace: test.engine.namespace,
-			Name:      test.engine.name,
-		}
-
-		dataset := &datav1alpha1.Dataset{}
-		err = client.Get(context.TODO(), key, dataset)
-		if err != nil {
-			t.Errorf("failt to get the dataset with error %v", err)
-		}
-
-		if index != 1 {
-			if dataset.Status.UfsTotal != test.expectedUfsTotal || dataset.Status.FileNum != test.expectedFileNum {
-				t.Errorf("%s expected UfsTotal %s, get UfsTotal %s, expected FileNum %s, get FileNum %s", test.engine.name, test.expectedUfsTotal, dataset.Status.UfsTotal, test.expectedFileNum, dataset.Status.FileNum)
-			}
-		}
-	}
 }

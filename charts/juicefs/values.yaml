@@ -1,5 +1,20 @@
 # This should not be modified in the usual case.
 fullnameOverride: juicefs
+edition: community
+
+## Common ##
+
+## global image pull secrets
+imagePullSecrets: []
+
+owner:
+  enabled: false
+  name: ""
+  kind: ""
+  uid: ""
+  apiVersion: ""
+  blockOwnerDeletion: false
+  controller: false
 
 ##
 ## Example:
@@ -16,8 +31,8 @@ tieredstore:
   path: /dev/shm
 
 # Docker Image
-image: juicedata/juicefs-csi-driver
-imageTag: v0.11.0
+image: juicedata/juicefs-fuse
+imageTag: v1.0.0
 imagePullPolicy: IfNotPresent
 
 ## WORKER ##
@@ -27,8 +42,13 @@ worker:
   imagePullPolicy: ""
   nodeSelector: ""
   cacheDir: ""
-  ports: []
   envs: []
+  command: ""
+  mountPath: /mnt/jfs
+  statCmd: "stat -c %i /mnt/jfs"
+  podManagementPolicy: Parallel
+  hostNetwork: false
+  hostPID: false
   resources:
     requests:
 #      cpu: "0.5"
@@ -36,18 +56,33 @@ worker:
     limits:
 #      cpu: "4"
 #      memory: "4G"
-  replicaCount: 0
+  replicas: 0
+  labels: {}
+  annotations: {}
+  volumes: []
+  volumeMounts: []
 
+
+configs:
+  name: ""
+  accesskeySecret: ""
+  accesskeySecretKey: ""
+  secretkeySecret: ""
+  secretkeySecretKey: ""
+  bucket: ""
+  metaurlSecret: ""
+  metaurlSecretKey: ""
+  storage: ""
+  tokenSecret: ""
+  tokenSecretKey: ""
+  formatCmd : ""
+  quotaCmd: ""
 
 ## FUSE ##
 
 fuse:
-  name: ""
-  accesskeySecret: ""
-  secretkeySecret: ""
-  bucket: ""
-  metaurlSecret: ""
-  storage: ""
+  hostNetwork: false
+  hostPID: false
   subPath: ""
   criticalPod: false
   enabled: true
@@ -56,14 +91,14 @@ fuse:
   imagePullPolicy: IfNotPresent
   envs: []
   nodeSelector: {}
-  dnsPolicy: ClusterFirstWithHostNet
   # Mount path in the host
   mountPath: /mnt/jfs
   cacheDir: ""
-  metaUrl : ""
   hostMountPath: /mnt/jfs
   command: "/usr/local/bin/juicefs mount /mnt/jfs"
   statCmd: "stat -c %i /mnt/jfs"
+  updateStrategy:
+    type: OnDelete
   resources:
     requests:
 #      cpu: "0.5"
@@ -71,3 +106,11 @@ fuse:
     limits:
 #      cpu: "4"
 #      memory: "4G"
+  labels: {}
+  annotations: {}
+  volumes: []
+  volumeMounts: []
+
+runtimeIdentity:
+  namespace: default
+  name: xxx

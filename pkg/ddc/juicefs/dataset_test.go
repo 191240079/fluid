@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,7 +25,6 @@ import (
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func TestUpdateCacheOfDataset(t *testing.T) {
@@ -66,7 +65,7 @@ func TestUpdateCacheOfDataset(t *testing.T) {
 
 	engine := &JuiceFSEngine{
 		Client:    client,
-		Log:       log.NullLogger{},
+		Log:       fake.NullLogger(),
 		name:      "hbase",
 		namespace: "fluid",
 		runtime:   testRuntimeInputs[0],
@@ -86,15 +85,6 @@ func TestUpdateCacheOfDataset(t *testing.T) {
 		Status: datav1alpha1.DatasetStatus{
 			CacheStates: map[common.CacheStateName]string{
 				common.Cached: "true",
-			},
-			Runtimes: []datav1alpha1.Runtime{
-				{
-					Name:           "hbase",
-					Namespace:      "fluid",
-					Category:       common.AccelerateCategory,
-					Type:           common.JuiceFSRuntime,
-					MasterReplicas: 1,
-				},
 			},
 		},
 	}
@@ -155,7 +145,7 @@ func TestUpdateDatasetStatus(t *testing.T) {
 
 	engine := &JuiceFSEngine{
 		Client:    client,
-		Log:       log.NullLogger{},
+		Log:       fake.NullLogger(),
 		name:      "hbase",
 		namespace: "fluid",
 		runtime:   testRuntimeInputs[0],
@@ -180,6 +170,15 @@ func TestUpdateDatasetStatus(t *testing.T) {
 					HCFSStatus: &datav1alpha1.HCFSStatus{
 						Endpoint:                    "test Endpoint",
 						UnderlayerFileSystemVersion: "Underlayer HCFS Compatible Version",
+					},
+					Runtimes: []datav1alpha1.Runtime{
+						{
+							Name:           "hbase",
+							Namespace:      "fluid",
+							Category:       common.AccelerateCategory,
+							Type:           common.JuiceFSRuntime,
+							MasterReplicas: 1,
+						},
 					},
 				},
 			},
@@ -288,7 +287,7 @@ func TestBindToDataset(t *testing.T) {
 
 	engine := &JuiceFSEngine{
 		Client:    client,
-		Log:       log.NullLogger{},
+		Log:       fake.NullLogger(),
 		name:      "hbase",
 		namespace: "fluid",
 		runtime:   testRuntimeInputs[0],

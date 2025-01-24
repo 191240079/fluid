@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Fluid Authors.
+Copyright 2022 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,19 +30,24 @@ import (
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/csi"
 	"github.com/fluid-cloudnative/fluid/pkg/csi/config"
+	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	utilfeature "github.com/fluid-cloudnative/fluid/pkg/utils/feature"
 	"github.com/golang/glog"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 var (
-	endpoint    string
-	nodeID      string
-	metricsAddr string
-	pprofAddr   string
+	endpoint              string
+	nodeID                string
+	metricsAddr           string
+	pprofAddr             string
+	pruneFs               []string
+	prunePath             string
+	kubeletKubeConfigPath string
 )
 
 var scheme = runtime.NewScheme()
@@ -75,8 +80,11 @@ func init() {
 		ErrorAndExit(err)
 	}
 
+	startCmd.Flags().StringSliceVarP(&pruneFs, "prune-fs", "", []string{"fuse.alluxio-fuse", "fuse.jindofs-fuse", "fuse.juicefs", "fuse.goosefs-fuse", "ossfs"}, "Prune fs to add in /etc/updatedb.conf, separated by comma")
+	startCmd.Flags().StringVarP(&prunePath, "prune-path", "", "/runtime-mnt", "Prune path to add in /etc/updatedb.conf")
 	startCmd.Flags().StringVarP(&metricsAddr, "metrics-addr", "", ":8080", "The address the metrics endpoint binds to.")
 	startCmd.Flags().StringVarP(&pprofAddr, "pprof-addr", "", "", "The address for pprof to use while exporting profiling results")
+	startCmd.Flags().StringVarP(&kubeletKubeConfigPath, "kubelet-kube-config", "", "/etc/kubernetes/kubelet.conf", "The file path to kubelet kube config")
 	utilfeature.DefaultMutableFeatureGate.AddFlag(startCmd.Flags())
 	startCmd.Flags().AddGoFlagSet(flag.CommandLine)
 }
@@ -94,22 +102,29 @@ func handle() {
 		newPprofServer(pprofAddr)
 	}
 
+	// the default webhook server port is 9443, no need to set
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
-		Port:               9443,
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
 	})
 
 	if err != nil {
 		panic(fmt.Sprintf("csi: unable to create controller manager due to error %v", err))
 	}
 
-	config := config.Config{
-		NodeId:   nodeID,
-		Endpoint: endpoint,
+	runningContext := config.RunningContext{
+		Config: config.Config{
+			NodeId:            nodeID,
+			Endpoint:          endpoint,
+			PruneFs:           pruneFs,
+			PrunePath:         prunePath,
+			KubeletConfigPath: kubeletKubeConfigPath,
+		},
+		VolumeLocks: utils.NewVolumeLocks(),
 	}
-
-	if err = csi.SetupWithManager(mgr, config); err != nil {
+	if err = csi.SetupWithManager(mgr, runningContext); err != nil {
 		panic(fmt.Sprintf("unable to set up manager due to error %v", err))
 	}
 
@@ -147,7 +162,7 @@ func newPprofServer(pprofAddr string) {
 			}
 		}()
 
-		if err := pprofServer.ListenAndServe(); !errors.Is(http.ErrServerClosed, err) {
+		if err := pprofServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			glog.Error(err, "Failed to start debug HTTP server")
 			panic(err)
 		}

@@ -17,29 +17,30 @@ limitations under the License.
 package operations
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/brahma-adshonor/gohook"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func TestAlluxioFileUtils_GetConf(t *testing.T) {
-	mockExec := func(podName string, containerName string, namespace string, cmd []string) (stdout string, stderr string, e error) {
+	mockExec := func(ctx context.Context, podName string, containerName string, namespace string, cmd []string) (stdout string, stderr string, e error) {
 		if strings.Contains(cmd[2], OTHER_ERR) {
 			return "", "", errors.New("other error")
 		} else {
 			return "conf", "", nil
 		}
 	}
-	err := gohook.Hook(kubeclient.ExecCommandInContainer, mockExec, nil)
+	err := gohook.Hook(kubeclient.ExecCommandInContainerWithFullOutput, mockExec, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	wrappedUnhook := func() {
-		err := gohook.UnHook(kubeclient.ExecCommandInContainer)
+		err := gohook.UnHook(kubeclient.ExecCommandInContainerWithFullOutput)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
@@ -56,7 +57,7 @@ func TestAlluxioFileUtils_GetConf(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		stdout, err := AlluxioFileUtils{log: logf.NullLogger{}}.GetConf(test.in)
+		stdout, err := AlluxioFileUtils{log: fake.NullLogger()}.GetConf(test.in)
 		if stdout != test.out {
 			t.Errorf("input parameter is %s,expected %s, got %s", test.in, test.out, stdout)
 		}

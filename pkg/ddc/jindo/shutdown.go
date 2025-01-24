@@ -1,3 +1,19 @@
+/*
+Copyright 2022 The Fluid Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package jindo
 
 import (
@@ -21,9 +37,15 @@ import (
 // Shutdown shuts down the Jindo engine
 func (e *JindoEngine) Shutdown() (err error) {
 
-	err = e.invokeCleanCache()
-	if err != nil {
-		return
+	if e.retryShutdown < e.gracefulShutdownLimits {
+		err = e.invokeCleanCache()
+		if err != nil {
+			e.retryShutdown = e.retryShutdown + 1
+			e.Log.Info("clean cache failed",
+				// "engine", e,
+				"retry times", e.retryShutdown)
+			return
+		}
 	}
 
 	_, err = e.destroyWorkers(-1)
@@ -111,9 +133,9 @@ func (e *JindoEngine) cleanAll() (err error) {
 // {dataset name}-jindo-values, {dataset name}-jindofs-client-config, {dataset name}-jindofs-config
 func (e *JindoEngine) cleanConfigMap() (err error) {
 	var (
-		valueConfigmapName  = e.name + "-" + e.runtimeType + "-values"
-		configmapName       = e.name + "-" + runtimeFSType + "-config"
-		clientConfigmapName = e.name + "-" + runtimeFSType + "-client-config"
+		valueConfigmapName  = e.getHelmValuesConfigmapName()
+		configmapName       = e.name + "-" + RuntimeFSType + "-config"
+		clientConfigmapName = e.name + "-" + RuntimeFSType + "-client-config"
 		namespace           = e.namespace
 	)
 
@@ -174,14 +196,7 @@ func (e *JindoEngine) destroyWorkers(expectedWorkers int32) (currentWorkers int3
 	if expectedWorkers >= 0 {
 		e.Log.Info("Scale in Jindo workers", "expectedWorkers", expectedWorkers)
 		// This is a scale in operation
-		runtimeInfo, err := e.getRuntimeInfo()
-		if err != nil {
-			e.Log.Error(err, "getRuntimeInfo when scaling in")
-			return currentWorkers, err
-		}
-
-		fuseGlobal, _ := runtimeInfo.GetFuseDeployMode()
-		nodes, err = e.sortNodesToShutdown(nodeList.Items, fuseGlobal)
+		nodes, err = e.sortNodesToShutdown(nodeList.Items)
 		if err != nil {
 			return currentWorkers, err
 		}
@@ -215,7 +230,7 @@ func (e *JindoEngine) destroyWorkers(expectedWorkers int32) (currentWorkers int3
 				labelsToModify.Delete(label)
 			}
 
-			exclusiveLabelValue := utils.GetExclusiveValue(e.namespace, e.name)
+			exclusiveLabelValue := runtimeInfo.GetExclusiveLabelValue()
 			if val, exist := toUpdate.Labels[labelExclusiveName]; exist && val == exclusiveLabelValue {
 				labelsToModify.Delete(labelExclusiveName)
 
@@ -247,27 +262,10 @@ func (e *JindoEngine) destroyWorkers(expectedWorkers int32) (currentWorkers int3
 	return currentWorkers, nil
 }
 
-func (e *JindoEngine) sortNodesToShutdown(candidateNodes []corev1.Node, fuseGlobal bool) (nodes []corev1.Node, err error) {
-	if !fuseGlobal {
-		// If fuses are deployed in non-global mode, workers and fuses will be scaled in together.
-		// It can be dangerous if we scale in nodes where there are pods using the related pvc.
-		// So firstly we filter out such nodes
-		pvcMountNodes, err := kubeclient.GetPvcMountNodes(e.Client, e.name, e.namespace)
-		if err != nil {
-			e.Log.Error(err, "GetPvcMountNodes when scaling in")
-			return nil, err
-		}
-
-		for _, node := range candidateNodes {
-			if _, found := pvcMountNodes[node.Name]; !found {
-				nodes = append(nodes, node)
-			}
-		}
-	} else {
-		// If fuses are deployed in global mode. Scaling in workers has nothing to do with fuses.
-		// All nodes with related label can be candidate nodes.
-		nodes = candidateNodes
-	}
+func (e *JindoEngine) sortNodesToShutdown(candidateNodes []corev1.Node) (nodes []corev1.Node, err error) {
+	// If fuses are deployed in global mode. Scaling in workers has nothing to do with fuses.
+	// All nodes with related label can be candidate nodes.
+	nodes = candidateNodes
 	// TODO support jindo calculate node usedCapacity
 	return nodes, nil
 }

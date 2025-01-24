@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,10 +17,13 @@ limitations under the License.
 package alluxio
 
 import (
-	"github.com/fluid-cloudnative/fluid/pkg/common"
-	corev1 "k8s.io/api/core/v1"
+	"reflect"
 	"strconv"
 	"testing"
+
+	"github.com/fluid-cloudnative/fluid/pkg/common"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
+	corev1 "k8s.io/api/core/v1"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/go-logr/logr"
@@ -162,16 +166,24 @@ func TestSetDefaultPropertiesWithSet(t *testing.T) {
 
 func TestOptimizeDefaultForMasterNoValue(t *testing.T) {
 	var tests = []struct {
-		runtime      *datav1alpha1.AlluxioRuntime
-		alluxioValue *Alluxio
-		expect       []string
+		runtime           *datav1alpha1.AlluxioRuntime
+		alluxioValue      *Alluxio
+		expect            []string
+		foundMountPathEnv bool
 	}{
 		{&datav1alpha1.AlluxioRuntime{
 			Spec: datav1alpha1.AlluxioRuntimeSpec{},
 		}, &Alluxio{
 			Properties: map[string]string{},
 		}, []string{"-Xmx6G",
-			"-XX:+UnlockExperimentalVMOptions"}},
+			"-XX:+UnlockExperimentalVMOptions"}, true},
+
+		{&datav1alpha1.AlluxioRuntime{
+			Spec: datav1alpha1.AlluxioRuntimeSpec{},
+		}, &Alluxio{
+			Properties: map[string]string{},
+		}, []string{"-Xmx6G",
+			"-XX:+UnlockExperimentalVMOptions"}, false},
 	}
 	for _, test := range tests {
 		engine := &AlluxioEngine{}
@@ -179,6 +191,7 @@ func TestOptimizeDefaultForMasterNoValue(t *testing.T) {
 		if test.alluxioValue.Master.JvmOptions[1] != test.expect[1] {
 			t.Errorf("expected %v, got %v", test.expect, test.alluxioValue.JvmOptions)
 		}
+
 	}
 }
 
@@ -258,34 +271,67 @@ func TestOptimizeDefaultForWorkerWithValue(t *testing.T) {
 
 func TestOptimizeDefaultForFuseNoValue(t *testing.T) {
 	var tests = []struct {
-		runtime      *datav1alpha1.AlluxioRuntime
-		alluxioValue *Alluxio
-		expect       []string
+		runtime             *datav1alpha1.AlluxioRuntime
+		alluxioValue        *Alluxio
+		isNewFuseArgVersion bool
+		expect              []string
+		expectArgs          []string
+		foundMountPathEnv   bool
 	}{
 		{&datav1alpha1.AlluxioRuntime{
 			Spec: datav1alpha1.AlluxioRuntimeSpec{},
 		}, &Alluxio{
 			Properties: map[string]string{},
-		}, []string{"-Xmx16G",
+			Fuse: Fuse{
+				MountPath: "/mnt/runtime",
+			},
+		}, true, []string{"-Xmx16G",
 			"-Xms16G",
 			"-XX:+UseG1GC",
 			"-XX:MaxDirectMemorySize=32g",
-			"-XX:+UnlockExperimentalVMOptions"}},
+			"-XX:+UnlockExperimentalVMOptions"},
+			[]string{"fuse", "--fuse-opts=kernel_cache,rw", "/mnt/runtime", "/"},
+			false},
+		{&datav1alpha1.AlluxioRuntime{
+			Spec: datav1alpha1.AlluxioRuntimeSpec{},
+		}, &Alluxio{
+			Properties: map[string]string{},
+			Fuse: Fuse{
+				MountPath: "/mnt/runtime",
+			},
+		}, false, []string{"-Xmx16G",
+			"-Xms16G",
+			"-XX:+UseG1GC",
+			"-XX:MaxDirectMemorySize=32g",
+			"-XX:+UnlockExperimentalVMOptions"},
+			[]string{"fuse", "--fuse-opts=kernel_cache,rw"},
+			true},
 	}
 	for _, test := range tests {
 		engine := &AlluxioEngine{}
-		engine.optimizeDefaultFuse(test.runtime, test.alluxioValue)
-		if test.alluxioValue.Fuse.JvmOptions[1] != test.expect[1] {
+
+		engine.optimizeDefaultFuse(test.runtime, test.alluxioValue, test.isNewFuseArgVersion)
+		if !reflect.DeepEqual(test.alluxioValue.Fuse.JvmOptions, test.expect) {
 			t.Errorf("expected %v, got %v", test.expect, test.alluxioValue.Fuse.JvmOptions)
 		}
+
+		if !reflect.DeepEqual(test.alluxioValue.Fuse.Args, test.expectArgs) {
+			t.Errorf("expected fuse arg %v, got fuse arg %v", test.expectArgs, test.alluxioValue.Fuse.Args)
+		}
+
+		// _, found := test.alluxioValue.Fuse.Env["MOUNT_PATH"]
+		// if found != test.foundMountPathEnv {
+		// 	t.Errorf("expected fuse env %v, got fuse env %v", test.foundMountPathEnv, test.alluxioValue.Fuse.Env)
+		// }
 	}
 }
 
 func TestOptimizeDefaultForFuseWithValue(t *testing.T) {
 	var tests = []struct {
-		runtime      *datav1alpha1.AlluxioRuntime
-		alluxioValue *Alluxio
-		expect       []string
+		runtime             *datav1alpha1.AlluxioRuntime
+		alluxioValue        *Alluxio
+		isNewFuseArgVersion bool
+		expect              []string
 	}{
 		{&datav1alpha1.AlluxioRuntime{
 			Spec: datav1alpha1.AlluxioRuntimeSpec{
@@ -295,11 +341,11 @@ func TestOptimizeDefaultForFuseWithValue(t *testing.T) {
 			},
 		}, &Alluxio{
 			Properties: map[string]string{},
-		}, []string{"-Xmx4G"}},
+		}, true, []string{"-Xmx4G"}},
 	}
 	for _, test := range tests {
 		engine := &AlluxioEngine{}
-		engine.optimizeDefaultFuse(test.runtime, test.alluxioValue)
+		engine.optimizeDefaultFuse(test.runtime, test.alluxioValue, test.isNewFuseArgVersion)
 		if test.alluxioValue.Fuse.JvmOptions[0] != test.expect[0] {
 			t.Errorf("expected %v, got %v", test.expect, test.alluxioValue.Fuse.JvmOptions)
 		}
@@ -308,16 +354,15 @@ func TestOptimizeDefaultForFuseWithValue(t *testing.T) {
 
 func TestAlluxioEngine_setPortProperties(t *testing.T) {
 	type fields struct {
-		runtime                *datav1alpha1.AlluxioRuntime
-		name                   string
-		namespace              string
-		runtimeType            string
-		Log                    logr.Logger
-		Client                 client.Client
-		gracefulShutdownLimits int32
-		retryShutdown          int32
-		initImage              string
-		MetadataSyncDoneCh     chan MetadataSyncResult
+		runtime            *datav1alpha1.AlluxioRuntime
+		name               string
+		namespace          string
+		runtimeType        string
+		Log                logr.Logger
+		Client             client.Client
+		retryShutdown      int32
+		initImage          string
+		MetadataSyncDoneCh chan base.MetadataSyncResult
 	}
 	type args struct {
 		runtime      *datav1alpha1.AlluxioRuntime
@@ -385,16 +430,15 @@ func TestAlluxioEngine_setPortProperties(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := &AlluxioEngine{
-				runtime:                tt.fields.runtime,
-				name:                   tt.fields.name,
-				namespace:              tt.fields.namespace,
-				runtimeType:            tt.fields.runtimeType,
-				Log:                    tt.fields.Log,
-				Client:                 tt.fields.Client,
-				gracefulShutdownLimits: tt.fields.gracefulShutdownLimits,
-				retryShutdown:          tt.fields.retryShutdown,
-				initImage:              tt.fields.initImage,
-				MetadataSyncDoneCh:     tt.fields.MetadataSyncDoneCh,
+				runtime:            tt.fields.runtime,
+				name:               tt.fields.name,
+				namespace:          tt.fields.namespace,
+				runtimeType:        tt.fields.runtimeType,
+				Log:                tt.fields.Log,
+				Client:             tt.fields.Client,
+				retryShutdown:      tt.fields.retryShutdown,
+				initImage:          tt.fields.initImage,
+				MetadataSyncDoneCh: tt.fields.MetadataSyncDoneCh,
 			}
 			e.setPortProperties(tt.args.runtime, tt.args.alluxioValue)
 			key := tt.args.alluxioValue.Properties["alluxio.master.rpc.port"]
@@ -402,5 +446,43 @@ func TestAlluxioEngine_setPortProperties(t *testing.T) {
 				t.Errorf("expected %d, got %s", port, tt.args.alluxioValue.Properties["alluxio.master.rpc.port"])
 			}
 		})
+	}
+}
+
+func TestOptimizeDefaultForFuseWithArgs(t *testing.T) {
+	var tests = []struct {
+		runtime             *datav1alpha1.AlluxioRuntime
+		alluxioValue        *Alluxio
+		isNewFuseArgVersion bool
+		expectArgs          []string
+	}{
+		{&datav1alpha1.AlluxioRuntime{
+			Spec: datav1alpha1.AlluxioRuntimeSpec{
+				Fuse: datav1alpha1.AlluxioFuseSpec{
+					Args: []string{"fuse", "--fuse-opts=kernel_cache,rw,max_read=131072"},
+				},
+			},
+		}, &Alluxio{
+			Properties: map[string]string{},
+			Fuse: Fuse{
+				MountPath: "/mnt/runtime",
+			},
+		}, true, []string{"fuse", "--fuse-opts=kernel_cache,rw,max_read=131072", "/mnt/runtime", "/"}},
+		{&datav1alpha1.AlluxioRuntime{
+			Spec: datav1alpha1.AlluxioRuntimeSpec{
+				Fuse: datav1alpha1.AlluxioFuseSpec{
+					Args: []string{"fuse", "--fuse-opts=kernel_cache,rw,max_read=131072"},
+				},
+			},
+		}, &Alluxio{
+			Properties: map[string]string{},
+		}, false, []string{"fuse", "--fuse-opts=kernel_cache,rw,max_read=131072"}},
+	}
+	for _, test := range tests {
+		engine := &AlluxioEngine{}
+		engine.optimizeDefaultFuse(test.runtime, test.alluxioValue, test.isNewFuseArgVersion)
+		if !reflect.DeepEqual(test.alluxioValue.Fuse.Args, test.expectArgs) {
+			t.Errorf("expected fuse arg %v, got fuse arg %v", test.expectArgs, test.alluxioValue.Fuse.Args)
+		}
 	}
 }

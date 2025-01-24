@@ -27,6 +27,7 @@ import (
 // The value yaml file
 type GooseFS struct {
 	FullnameOverride string `yaml:"fullnameOverride"`
+	OwnerDatasetId   string `yaml:"ownerDatasetId"`
 
 	common.ImageInfo `yaml:",inline"`
 	common.UserInfo  `yaml:",inline"`
@@ -85,6 +86,7 @@ type UFSPath struct {
 
 type UFSVolume struct {
 	Name          string `yaml:"name"`
+	SubPath       string `yaml:"subPath,omitempty"`
 	ContainerPath string `yaml:"containerPath"`
 }
 
@@ -171,6 +173,7 @@ type Fuse struct {
 	ShortCircuitPolicy string            `yaml:"shortCircuitPolicy,omitempty"`
 	Args               []string          `yaml:"args,omitempty"`
 	HostNetwork        bool              `yaml:"hostNetwork,omitempty"`
+	HostPID            bool              `json:"hostPID,omitempty"`
 	Enabled            bool              `yaml:"enabled,omitempty"`
 	Resources          common.Resources  `yaml:"resources,omitempty"`
 	Global             bool              `yaml:"global,omitempty"`

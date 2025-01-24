@@ -18,8 +18,9 @@ package juicefs
 
 import (
 	"context"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 	"reflect"
+
+	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
@@ -83,6 +84,7 @@ func (j JuiceFSEngine) SetupMaster() (err error) {
 		// Init selector for worker
 		runtimeToUpdate.Status.Selector = j.getWorkerSelectors()
 		runtimeToUpdate.Status.DesiredWorkerNumberScheduled = replicas
+		runtimeToUpdate.Status.ValueFileConfigmap = j.getHelmValuesConfigMapName()
 
 		if len(runtimeToUpdate.Status.Conditions) == 0 {
 			runtimeToUpdate.Status.Conditions = []datav1alpha1.RuntimeCondition{}

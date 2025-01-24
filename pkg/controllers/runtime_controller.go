@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,19 +17,28 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	"fmt"
+	"reflect"
+	"strings"
 	"time"
+
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	// "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/fluid-cloudnative/fluid/pkg/dump"
+	"github.com/fluid-cloudnative/fluid/pkg/metrics"
 	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
 	corev1 "k8s.io/api/core/v1"
 
@@ -39,6 +49,8 @@ import (
 )
 
 // var _ RuntimeReconcilerInterface = (*RuntimeReconciler)(nil)
+
+var reconcileTimeout = 10 * time.Minute
 
 // RuntimeReconciler is the default implementation
 type RuntimeReconciler struct {
@@ -64,26 +76,40 @@ func NewRuntimeReconciler(reconciler RuntimeReconcilerInterface, client client.C
 
 // ReconcileInternal handles the logic of reconcile runtime
 func (r *RuntimeReconciler) ReconcileInternal(ctx cruntime.ReconcileRequestContext) (ctrl.Result, error) {
+
+	// 0. Set context time limit
+	ctxWithTimeout, cancel := context.WithTimeout(ctx.Context, reconcileTimeout)
+	defer cancel()
+	ctx.Context = ctxWithTimeout
+
 	// 1.Get the runtime
 	runtime := ctx.Runtime
 	if runtime == nil {
 		return utils.RequeueIfError(fmt.Errorf("failed to find the runtime"))
 	}
 
-	// 2.Get or create the engine
+	// 2.Validate name is prefixed with a number such as "20-hbase".
+	if errs := validation.IsDNS1035Label(runtime.GetName()); len(runtime.GetName()) > 0 && len(errs) > 0 {
+		err := field.Invalid(field.NewPath("metadata").Child("name"), runtime.GetName(), strings.Join(errs, ","))
+		ctx.Log.Error(err, "Failed to validate runtime name")
+		r.Recorder.Eventf(runtime, corev1.EventTypeWarning, common.ErrorProcessRuntimeReason, "Failed to create ddc engine due to error %v", err)
+		return utils.RequeueIfError(errors.Wrap(err, "Failed to create"))
+	}
+
+	// 3.Get or create the engine
 	engine, err := r.implement.GetOrCreateEngine(ctx)
 	if err != nil {
 		r.Recorder.Eventf(runtime, corev1.EventTypeWarning, common.ErrorProcessRuntimeReason, "Process Runtime error %v", err)
 		return utils.RequeueIfError(errors.Wrap(err, "Failed to create"))
 	}
 
-	// 3.Get the ObjectMeta of runtime
+	// 4.Get the ObjectMeta of runtime
 	objectMeta, err := r.implement.GetRuntimeObjectMeta(ctx)
 	if err != nil {
 		return utils.RequeueIfError(err)
 	}
 
-	// 4.Get the dataset
+	// 5.Get the dataset
 	dataset, err := r.GetDataset(ctx)
 	if err != nil {
 		// r.Recorder.Eventf(ctx.Dataset, corev1.EventTypeWarning, common.ErrorProcessRuntimeReason, "Process Runtime error %v", err)
@@ -98,7 +124,7 @@ func (r *RuntimeReconciler) ReconcileInternal(ctx cruntime.ReconcileRequestConte
 	}
 	ctx.Dataset = dataset
 
-	// 5.Reconcile delete the runtime
+	// 6.Reconcile delete the runtime
 	// it should be after getting the dataset because need to edit the dataset during deleting
 	if !objectMeta.GetDeletionTimestamp().IsZero() {
 		result, err := r.implement.ReconcileRuntimeDeletion(engine, ctx)
@@ -109,10 +135,17 @@ func (r *RuntimeReconciler) ReconcileInternal(ctx cruntime.ReconcileRequestConte
 	}
 
 	if dataset != nil {
-		// 6.Add the OwnerReference of runtime and requeue
+		// 7.Add the OwnerReference of runtime and requeue
 		if !utils.ContainsOwners(objectMeta.GetOwnerReferences(), dataset) {
 			return r.AddOwnerAndRequeue(ctx, dataset)
 		}
+
+		if errs := utils.PatchLabelToObjects(ctx.Client, common.LabelAnnotationDatasetId,
+			utils.GetDatasetId(dataset.GetNamespace(), dataset.GetName(), string(dataset.UID)),
+			dataset, runtime); len(errs) > 0 {
+			return utils.RequeueAfterInterval(time.Duration(5 * time.Second))
+		}
+
 		if !dataset.CanbeBound(ctx.Name, ctx.Namespace, ctx.Category) {
 			ctx.Log.Info("the dataset can't be bound to the runtime, because it's already bound to another runtime ",
 				"dataset", dataset.Name)
@@ -122,7 +155,15 @@ func (r *RuntimeReconciler) ReconcileInternal(ctx cruntime.ReconcileRequestConte
 				dataset.Name)
 			return utils.RequeueAfterInterval(time.Duration(20 * time.Second))
 		}
-		// 7. Add Finalizer of runtime and requeue
+		// check reference dataset support
+		isSupport, reason := r.CheckIfReferenceDatasetIsSupported(ctx)
+		if !isSupport {
+			ctx.Log.Info(reason, "dataset", dataset.Name)
+			r.Recorder.Eventf(runtime, corev1.EventTypeWarning, common.ErrorProcessRuntimeReason, reason)
+			return utils.RequeueAfterInterval(time.Duration(20 * time.Second))
+		}
+
+		// 8. Add Finalizer of runtime and requeue
 		if !utils.ContainsString(objectMeta.GetFinalizers(), ctx.FinalizerName) {
 			return r.implement.AddFinalizerAndRequeue(ctx, ctx.FinalizerName)
 		} else {
@@ -132,10 +173,10 @@ func (r *RuntimeReconciler) ReconcileInternal(ctx cruntime.ReconcileRequestConte
 		// If dataset is nil, need to wait because the user may have not created dataset
 		ctx.Log.Info("No dataset can be bound to the runtime, waiting.")
 		r.Recorder.Event(runtime, corev1.EventTypeWarning, common.ErrorProcessRuntimeReason, "No dataset can be bound to the runtime, waiting.")
-		return utils.RequeueAfterInterval(time.Duration(20 * time.Second))
+		return utils.RequeueAfterInterval(time.Duration(5 * time.Second))
 	}
 
-	// 8.Start to reconcile runtime
+	// 9.Start to reconcile runtime
 	return r.implement.ReconcileRuntime(engine, ctx)
 }
 
@@ -153,7 +194,7 @@ func (r *RuntimeReconciler) ReconcileRuntimeDeletion(engine base.Engine, ctx cru
 		return utils.RequeueAfterInterval(time.Duration(20 * time.Second))
 	}
 
-	// 1. Delete the implementation of the the runtime
+	// 1. Delete the implementation of the runtime
 	err = engine.Shutdown()
 	if err != nil {
 		r.Recorder.Eventf(ctx.Runtime, corev1.EventTypeWarning, common.ErrorProcessRuntimeReason, "Failed to shutdown engine %v", err)
@@ -164,6 +205,7 @@ func (r *RuntimeReconciler) ReconcileRuntimeDeletion(engine base.Engine, ctx cru
 
 	// 2. Set the dataset's status as unbound
 	r.implement.RemoveEngine(ctx)
+	r.ForgetMetrics(ctx)
 	// r.removeEngine(engine.ID())
 	dataset := ctx.Dataset.DeepCopy()
 	if dataset != nil {
@@ -201,7 +243,7 @@ func (r *RuntimeReconciler) ReconcileRuntimeDeletion(engine base.Engine, ctx cru
 			log.Error(err, "Failed to remove finalizer")
 			return utils.RequeueIfError(err)
 		}
-		ctx.Log.V(1).Info("Finalizer is removed", "runtime", ctx.Runtime)
+		ctx.Log.Info("Finalizer is removed successfully", "runtime", ctx.Runtime)
 	}
 
 	return ctrl.Result{}, nil
@@ -214,12 +256,23 @@ func (r *RuntimeReconciler) ReconcileRuntime(engine base.Engine, ctx cruntime.Re
 	)
 	log.V(1).Info("process the Runtime", "Runtime", ctx.NamespacedName)
 
+	if err = engine.Validate(ctx); err != nil {
+		r.Recorder.Eventf(ctx.Runtime, corev1.EventTypeWarning, common.ErrorValidateSpecFieldsReason, "Validation failed for spec fields of Dataset and Runtime: %v", err)
+		log.Error(err, "Validation failed for spec fields of Dataset and Runtime")
+		return utils.RequeueAfterInterval(time.Duration(20 * time.Second))
+	}
+
 	// 1.Setup the ddc engine, and wait it ready
 	if !utils.IsSetupDone(ctx.Dataset) {
 		ready, err := engine.Setup(ctx)
 		if err != nil {
 			r.Recorder.Eventf(ctx.Runtime, corev1.EventTypeWarning, common.ErrorProcessRuntimeReason, "Failed to setup ddc engine due to error %v", err)
 			log.Error(err, "Failed to setup the ddc engine")
+			reportErr := r.ReportDatasetNotReadyCondition(ctx, err)
+			if reportErr != nil {
+				// ignore report error
+				log.Error(err, "failed to report not ready condition to dataset", "dataset", types.NamespacedName{Namespace: ctx.Namespace, Name: ctx.Name})
+			}
 			// return utils.RequeueIfError(errors.Wrap(err, "Failed to steup the ddc engine"))
 		}
 		if !ready {
@@ -231,9 +284,9 @@ func (r *RuntimeReconciler) ReconcileRuntime(engine base.Engine, ctx cruntime.Re
 
 	// 2.Setup the volume
 	err = engine.CreateVolume()
-	if err != nil {
+	if err != nil && utils.IgnoreAlreadyExists(err) != nil {
 		r.Recorder.Eventf(ctx.Runtime, corev1.EventTypeWarning, common.ErrorProcessRuntimeReason, "Failed to setup volume due to error %v", err)
-		log.Error(err, "Failed to steup the volume")
+		log.Error(err, "Failed to setup the volume")
 		// return utils.RequeueIfError(errors.Wrap(err, "Failed to steup the ddc engine"))
 	}
 
@@ -263,12 +316,12 @@ func (r *RuntimeReconciler) AddFinalizerAndRequeue(ctx cruntime.ReconcileRequest
 	prevGeneration := objectMeta.GetGeneration()
 	objectMeta.SetFinalizers(append(objectMeta.GetFinalizers(), finalizerName))
 	if err := r.Update(ctx, ctx.Runtime); err != nil {
-		ctx.Log.Error(err, "Failed to add finalizer", "StatusUpdateError", ctx)
+		ctx.Log.Error(err, "Failed to add finalizer", "Runtime", ctx.Runtime)
 		return utils.RequeueIfError(err)
 	}
 	// controllerutil.AddFinalizer(ctx.Runtime, finalizer)
 	currentGeneration := objectMeta.GetGeneration()
-	ctx.Log.Info("RequeueImmediatelyUnlessGenerationChanged", "prevGeneration", prevGeneration,
+	ctx.Log.V(1).Info("RequeueImmediatelyUnlessGenerationChanged", "prevGeneration", prevGeneration,
 		"currentGeneration", currentGeneration)
 
 	return utils.RequeueImmediatelyUnlessGenerationChanged(prevGeneration, currentGeneration)
@@ -313,6 +366,51 @@ func (r *RuntimeReconciler) GetDataset(ctx cruntime.ReconcileRequestContext) (*d
 		return nil, err
 	}
 	return &dataset, nil
+}
+
+func (r *RuntimeReconciler) CheckIfReferenceDatasetIsSupported(ctx cruntime.ReconcileRequestContext) (bool, string) {
+	mounted := base.GetPhysicalDatasetFromMounts(ctx.Dataset.Spec.Mounts)
+
+	if len(mounted) > 0 && ctx.RuntimeType != common.ThinRuntime {
+		return false, "dataset mounting another dataset can only use thin runtime"
+	}
+	return true, ""
+}
+
+func (r *RuntimeReconciler) ReportDatasetNotReadyCondition(ctx cruntime.ReconcileRequestContext, notReadyReason error) error {
+	datasetToReport := ctx.Dataset
+	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		dataset, err := utils.GetDataset(r.Client, datasetToReport.Name, datasetToReport.Namespace)
+		if err != nil {
+			return err
+		}
+
+		datasetToUpdate := dataset.DeepCopy()
+		cond := utils.NewDatasetCondition(datav1alpha1.DatasetNotReady, datav1alpha1.DatasetFailedToSetupReason, notReadyReason.Error(), corev1.ConditionTrue)
+
+		datasetToUpdate.Status.Conditions = utils.UpdateDatasetCondition(datasetToUpdate.Status.Conditions, cond)
+
+		if !reflect.DeepEqual(dataset.Status, datasetToUpdate.Status) {
+			err = r.Client.Status().Update(context.TODO(), datasetToUpdate)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ForgetMetrics deletes related metrics in prometheus metrics to avoid memory inflation
+func (r *RuntimeReconciler) ForgetMetrics(ctx cruntime.ReconcileRequestContext) {
+	metrics.GetOrCreateRuntimeMetrics(ctx.Runtime.GetObjectKind().GroupVersionKind().Kind, ctx.Namespace, ctx.Name).Forget()
+	metrics.GetOrCreateDatasetMetrics(ctx.Namespace, ctx.Name).Forget()
 }
 
 // The interface of RuntimeReconciler

@@ -26,15 +26,13 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func TestCreateVolume(t *testing.T) {
-	runtimeInfo, err := base.BuildRuntimeInfo("hbase", "fluid", "alluxio", datav1alpha1.TieredStore{})
+	runtimeInfo, err := base.BuildRuntimeInfo("hbase", "fluid", "alluxio")
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
 	}
-	runtimeInfo.SetupFuseDeployMode(false, nil)
 
 	testDatasetInputs := []*datav1alpha1.Dataset{
 		{
@@ -54,7 +52,7 @@ func TestCreateVolume(t *testing.T) {
 
 	engine := &AlluxioEngine{
 		Client:      client,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 		namespace:   "fluid",
 		name:        "hbase",
 		runtimeInfo: runtimeInfo,
@@ -93,11 +91,10 @@ func TestCreateVolume(t *testing.T) {
 }
 
 func TestCreateFusePersistentVolume(t *testing.T) {
-	runtimeInfo, err := base.BuildRuntimeInfo("hbase", "fluid", "alluxio", datav1alpha1.TieredStore{})
+	runtimeInfo, err := base.BuildRuntimeInfo("hbase", "fluid", "alluxio")
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
 	}
-	runtimeInfo.SetupFuseDeployMode(false, nil)
 
 	testDatasetInputs := []*datav1alpha1.Dataset{
 		{
@@ -117,7 +114,7 @@ func TestCreateFusePersistentVolume(t *testing.T) {
 
 	engine := &AlluxioEngine{
 		Client:      client,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 		namespace:   "fluid",
 		name:        "hbase",
 		runtimeInfo: runtimeInfo,
@@ -140,11 +137,10 @@ func TestCreateFusePersistentVolume(t *testing.T) {
 }
 
 func TestCreateFusePersistentVolumeClaim(t *testing.T) {
-	runtimeInfo, err := base.BuildRuntimeInfo("hbase", "fluid", "alluxio", datav1alpha1.TieredStore{})
+	runtimeInfo, err := base.BuildRuntimeInfo("hbase", "fluid", "alluxio")
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
 	}
-	runtimeInfo.SetupFuseDeployMode(false, nil)
 
 	testDatasetInputs := []*datav1alpha1.Dataset{
 		{
@@ -164,7 +160,7 @@ func TestCreateFusePersistentVolumeClaim(t *testing.T) {
 
 	engine := &AlluxioEngine{
 		Client:      client,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 		namespace:   "fluid",
 		name:        "hbase",
 		runtimeInfo: runtimeInfo,

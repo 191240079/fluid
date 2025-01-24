@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Fluid Authors.
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -150,7 +150,7 @@ func (e *GooseFSEngine) cleanupCache() (err error) {
 }
 
 func (e *GooseFSEngine) releasePorts() (err error) {
-	var valueConfigMapName = e.getConfigmapName()
+	var valueConfigMapName = e.getHelmValuesConfigMapName()
 
 	allocator, err := portallocator.GetRuntimePortAllocator()
 	if err != nil {
@@ -164,6 +164,7 @@ func (e *GooseFSEngine) releasePorts() (err error) {
 
 	// The value configMap is not found
 	if cm == nil {
+		e.Log.Info("value configMap not found, there might be some unreleased ports", "valueConfigMapName", valueConfigMapName)
 		return nil
 	}
 
@@ -186,7 +187,7 @@ func (e *GooseFSEngine) cleanAll() (err error) {
 	e.Log.Info("clean up fuse count", "n", count)
 
 	var (
-		valueConfigmapName = e.name + "-" + e.runtimeType + "-values"
+		valueConfigmapName = e.getHelmValuesConfigMapName()
 		configmapName      = e.name + "-config"
 		namespace          = e.namespace
 	)
@@ -250,14 +251,7 @@ func (e *GooseFSEngine) destroyWorkers(expectedWorkers int32) (currentWorkers in
 	if expectedWorkers >= 0 {
 		e.Log.Info("Scale in GooseFS workers", "expectedWorkers", expectedWorkers)
 		// This is a scale in operation
-		runtimeInfo, err := e.getRuntimeInfo()
-		if err != nil {
-			e.Log.Error(err, "getRuntimeInfo when scaling in")
-			return currentWorkers, err
-		}
-
-		fuseGlobal, _ := runtimeInfo.GetFuseDeployMode()
-		nodes, err = e.sortNodesToShutdown(nodeList.Items, fuseGlobal)
+		nodes, err = e.sortNodesToShutdown(nodeList.Items)
 		if err != nil {
 			return currentWorkers, err
 		}
@@ -291,7 +285,7 @@ func (e *GooseFSEngine) destroyWorkers(expectedWorkers int32) (currentWorkers in
 				labelsToModify.Delete(label)
 			}
 
-			exclusiveLabelValue := utils.GetExclusiveValue(e.namespace, e.name)
+			exclusiveLabelValue := runtimeInfo.GetExclusiveLabelValue()
 			if val, exist := toUpdate.Labels[labelExclusiveName]; exist && val == exclusiveLabelValue {
 				labelsToModify.Delete(labelExclusiveName)
 			}
@@ -321,27 +315,10 @@ func (e *GooseFSEngine) destroyWorkers(expectedWorkers int32) (currentWorkers in
 	return currentWorkers, nil
 }
 
-func (e *GooseFSEngine) sortNodesToShutdown(candidateNodes []corev1.Node, fuseGlobal bool) (nodes []corev1.Node, err error) {
-	if !fuseGlobal {
-		// If fuses are deployed in non-global mode, workers and fuses will be scaled in together.
-		// It can be dangerous if we scale in nodes where there are pods using the related pvc.
-		// So firstly we filter out such nodes
-		pvcMountNodes, err := kubeclient.GetPvcMountNodes(e.Client, e.name, e.namespace)
-		if err != nil {
-			e.Log.Error(err, "GetPvcMountNodes when scaling in")
-			return nil, err
-		}
-
-		for _, node := range candidateNodes {
-			if _, found := pvcMountNodes[node.Name]; !found {
-				nodes = append(nodes, node)
-			}
-		}
-	} else {
-		// If fuses are deployed in global mode. Scaling in workers has nothing to do with fuses.
-		// All nodes with related label can be candidate nodes.
-		nodes = candidateNodes
-	}
+func (e *GooseFSEngine) sortNodesToShutdown(candidateNodes []corev1.Node) (nodes []corev1.Node, err error) {
+	// If fuses are deployed in global mode. Scaling in workers has nothing to do with fuses.
+	// All nodes with related label can be candidate nodes.
+	nodes = candidateNodes
 
 	// Prefer to choose nodes with less data cache.
 	// Since this is just a preference, anything unexpected will be ignored.

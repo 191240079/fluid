@@ -1,30 +1,40 @@
+/*
+Copyright 2022 The Fluid Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package jindo
 
 import (
-	"github.com/fluid-cloudnative/fluid/pkg/common"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"testing"
 
 	"github.com/brahma-adshonor/gohook"
-	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
-	"github.com/fluid-cloudnative/fluid/pkg/ddc/base/portallocator"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/helm"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubectl"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/net"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base/portallocator"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/helm"
 )
 
 func TestSetupMasterInternal(t *testing.T) {
-	mockExecCreateConfigMapFromFileCommon := func(name string, key, fileName string, namespace string) (err error) {
-		return nil
-	}
-	mockExecCreateConfigMapFromFileErr := func(name string, key, fileName string, namespace string) (err error) {
-		return errors.New("fail to exec command")
-	}
 	mockExecCheckReleaseCommonFound := func(name string, namespace string) (exist bool, err error) {
 		return true, nil
 	}
@@ -41,12 +51,6 @@ func TestSetupMasterInternal(t *testing.T) {
 		return errors.New("fail to install dataload chart")
 	}
 
-	wrappedUnhookCreateConfigMapFromFile := func() {
-		err := gohook.UnHook(kubectl.CreateConfigMapFromFile)
-		if err != nil {
-			t.Fatal(err.Error())
-		}
-	}
 	wrappedUnhookCheckRelease := func() {
 		err := gohook.UnHook(helm.CheckRelease)
 		if err != nil {
@@ -82,11 +86,16 @@ func TestSetupMasterInternal(t *testing.T) {
 	}
 	client := fake.NewFakeClientWithScheme(testScheme, testObjs...)
 
+	runtimeInfo, err := base.BuildRuntimeInfo("hbase", "fluid", "jindo")
+	if err != nil {
+		t.Errorf("fail to create the runtimeInfo with error %v", err)
+	}
+
 	engine := JindoEngine{
 		name:      "hbase",
 		namespace: "fluid",
 		Client:    client,
-		Log:       log.NullLogger{},
+		Log:       fake.NullLogger(),
 		runtime: &datav1alpha1.JindoRuntime{
 			Spec: datav1alpha1.JindoRuntimeSpec{
 				Master: datav1alpha1.JindoCompTemplateSpec{
@@ -94,9 +103,9 @@ func TestSetupMasterInternal(t *testing.T) {
 				},
 			},
 		},
+		runtimeInfo: runtimeInfo,
 	}
-	portallocator.SetupRuntimePortAllocator(client, &net.PortRange{Base: 10, Size: 100}, GetReservedPorts)
-	err := gohook.Hook(kubectl.CreateConfigMapFromFile, mockExecCreateConfigMapFromFileErr, nil)
+	err = portallocator.SetupRuntimePortAllocator(client, &net.PortRange{Base: 10, Size: 100}, "bitmap", GetReservedPorts)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -104,14 +113,8 @@ func TestSetupMasterInternal(t *testing.T) {
 	if err == nil {
 		t.Errorf("fail to catch the error")
 	}
-	wrappedUnhookCreateConfigMapFromFile()
 
 	// create configmap successfully
-	err = gohook.Hook(kubectl.CreateConfigMapFromFile, mockExecCreateConfigMapFromFileCommon, nil)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-
 	// check release found
 	err = gohook.Hook(helm.CheckRelease, mockExecCheckReleaseCommonFound, nil)
 	if err != nil {
@@ -155,24 +158,9 @@ func TestSetupMasterInternal(t *testing.T) {
 	}
 	_ = engine.setupMasterInernal()
 	wrappedUnhookInstallRelease()
-	wrappedUnhookCreateConfigMapFromFile()
 }
 
 func TestGenerateJindoValueFile(t *testing.T) {
-	mockExecCreateConfigMapFromFileCommon := func(name string, key, fileName string, namespace string) (err error) {
-		return nil
-	}
-	mockExecCreateConfigMapFromFileErr := func(name string, key, fileName string, namespace string) (err error) {
-		return errors.New("fail to exec command")
-	}
-
-	wrappedUnhookCreateConfigMapFromFile := func() {
-		err := gohook.UnHook(kubectl.CreateConfigMapFromFile)
-		if err != nil {
-			t.Fatal(err.Error())
-		}
-	}
-
 	jindoruntime := &datav1alpha1.JindoRuntime{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "hbase",
@@ -195,12 +183,16 @@ func TestGenerateJindoValueFile(t *testing.T) {
 	}
 
 	client := fake.NewFakeClientWithScheme(testScheme, testObjs...)
+	runtimeInfo, err := base.BuildRuntimeInfo("hbase", "fluid", "jindo")
+	if err != nil {
+		t.Errorf("fail to create the runtimeInfo with error %v", err)
+	}
 	result := resource.MustParse("20Gi")
 	engine := JindoEngine{
 		name:      "hbase",
 		namespace: "fluid",
 		Client:    client,
-		Log:       log.NullLogger{},
+		Log:       fake.NullLogger(),
 		runtime: &datav1alpha1.JindoRuntime{
 			Spec: datav1alpha1.JindoRuntimeSpec{
 				Master: datav1alpha1.JindoCompTemplateSpec{
@@ -216,33 +208,26 @@ func TestGenerateJindoValueFile(t *testing.T) {
 				},
 			},
 		},
+		runtimeInfo: runtimeInfo,
 	}
 
-	portallocator.SetupRuntimePortAllocator(client, &net.PortRange{Base: 10, Size: 50}, GetReservedPorts)
-	err := gohook.Hook(kubectl.CreateConfigMapFromFile, mockExecCreateConfigMapFromFileErr, nil)
+	err = portallocator.SetupRuntimePortAllocator(client, &net.PortRange{Base: 10, Size: 50}, "bitmap", GetReservedPorts)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	_, err = engine.generateJindoValueFile()
-	if err == nil {
+	if err != nil {
 		t.Errorf("fail to catch the error")
 	}
-	wrappedUnhookCreateConfigMapFromFile()
-
-	err = gohook.Hook(kubectl.CreateConfigMapFromFile, mockExecCreateConfigMapFromFileCommon, nil)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	wrappedUnhookCreateConfigMapFromFile()
 }
 
 func TestGetConfigmapName(t *testing.T) {
 	engine := JindoEngine{
-		name:        "hbase",
-		runtimeType: "Jindo",
+		name:       "hbase",
+		engineImpl: "jindo",
 	}
-	expectedResult := "hbase-Jindo-values"
-	if engine.getConfigmapName() != expectedResult {
+	expectedResult := "hbase-jindo-values"
+	if engine.getHelmValuesConfigmapName() != expectedResult {
 		t.Errorf("fail to get the configmap name")
 	}
 }

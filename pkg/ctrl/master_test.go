@@ -29,8 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	utilpointer "k8s.io/utils/pointer"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"k8s.io/utils/ptr"
 )
 
 func TestCheckMasterHealthy(t *testing.T) {
@@ -130,7 +129,7 @@ func TestCheckMasterHealthy(t *testing.T) {
 				Namespace: "big-data",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(2),
+				Replicas: ptr.To[int32](2),
 			},
 			Status: appsv1.StatefulSetStatus{
 				ReadyReplicas: 1,
@@ -142,7 +141,7 @@ func TestCheckMasterHealthy(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(3),
+				Replicas: ptr.To[int32](3),
 			},
 			Status: appsv1.StatefulSetStatus{
 				ReadyReplicas: 0,
@@ -154,7 +153,7 @@ func TestCheckMasterHealthy(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(3),
+				Replicas: ptr.To[int32](3),
 			},
 			Status: appsv1.StatefulSetStatus{
 				ReadyReplicas: 1,
@@ -202,7 +201,7 @@ func TestCheckMasterHealthy(t *testing.T) {
 					Namespace: "big-data",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: utilpointer.Int32Ptr(2),
+					Replicas: ptr.To[int32](2),
 				},
 				Status: appsv1.StatefulSetStatus{
 					Replicas:      1,
@@ -223,7 +222,7 @@ func TestCheckMasterHealthy(t *testing.T) {
 					Namespace: "fluid",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: utilpointer.Int32Ptr(3),
+					Replicas: ptr.To[int32](3),
 				},
 				Status: appsv1.StatefulSetStatus{
 					Replicas:      1,
@@ -236,7 +235,7 @@ func TestCheckMasterHealthy(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 
-		runtimeInfo, err := base.BuildRuntimeInfo(testCase.name, testCase.namespace, "jindo", datav1alpha1.TieredStore{})
+		runtimeInfo, err := base.BuildRuntimeInfo(testCase.name, testCase.namespace, "jindo")
 		if err != nil {
 			t.Errorf("testcase %s failed due to %v", testCase.name, err)
 		}
@@ -261,7 +260,7 @@ func TestCheckMasterHealthy(t *testing.T) {
 			t.Errorf("sync replicas failed,err:%s", err.Error())
 		}
 
-		h := BuildHelper(runtimeInfo, fakeClient, log.NullLogger{})
+		h := BuildHelper(runtimeInfo, fakeClient, fake.NullLogger())
 
 		err = h.CheckMasterHealthy(record.NewFakeRecorder(300),
 			runtime, runtime.Status, statefulset)

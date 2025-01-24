@@ -1,4 +1,5 @@
 /*
+Copyright 2022 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -33,7 +34,7 @@ func (e *GooseFSEngine) GetHCFSStatus() (status *datav1alpha1.HCFSStatus, err er
 
 	version, err := e.queryCompatibleUFSVersion()
 	if err != nil {
-		e.Log.Error(err, "Failed to get Compatiable Endpoint")
+		e.Log.Error(err, "Failed to get Compatible Endpoint")
 		return status, err
 	}
 

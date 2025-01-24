@@ -1,4 +1,5 @@
 /*
+Copyright 2021 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,21 +18,31 @@ package app
 
 import (
 	"flag"
-	"github.com/fluid-cloudnative/fluid"
-	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
-	"github.com/fluid-cloudnative/fluid/pkg/common"
-	"github.com/fluid-cloudnative/fluid/pkg/utils"
-	fluidwebhook "github.com/fluid-cloudnative/fluid/pkg/webhook"
-	"github.com/fluid-cloudnative/fluid/pkg/webhook/handler"
+	"os"
+
 	"github.com/spf13/cobra"
 	zapOpt "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	"github.com/fluid-cloudnative/fluid"
+	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
+	"github.com/fluid-cloudnative/fluid/pkg/controllers"
+	"github.com/fluid-cloudnative/fluid/pkg/ctrl/watch"
+	"github.com/fluid-cloudnative/fluid/pkg/utils"
+	fluidwebhook "github.com/fluid-cloudnative/fluid/pkg/webhook"
+	"github.com/fluid-cloudnative/fluid/pkg/webhook/handler"
+	"github.com/fluid-cloudnative/fluid/pkg/webhook/plugins"
 )
 
 const (
@@ -44,11 +55,15 @@ var (
 )
 
 var (
-	development bool
-	metricsAddr string
-	webhookPort int
-	certDir     string
-	pprofAddr   string
+	development   bool
+	fullGoProfile bool
+	metricsAddr   string
+	webhookPort   int
+	certDir       string
+	pprofAddr     string
+
+	kubeClientQPS   float32
+	kubeClientBurst int
 )
 
 var webhookCmd = &cobra.Command{
@@ -65,10 +80,14 @@ func init() {
 	_ = datav1alpha1.AddToScheme(scheme)
 
 	webhookCmd.Flags().StringVarP(&metricsAddr, "metrics-addr", "", ":8080", "The address the metric endpoint binds to.")
-	webhookCmd.Flags().BoolVarP(&development, "development", "", true, "Enable development mode for fluid controller.")
+	webhookCmd.Flags().BoolVarP(&development, "development", "", false, "Enable development mode for fluid controller.")
+	webhookCmd.Flags().BoolVarP(&fullGoProfile, "full-go-profile", "", false, "Enable full golang profile mode for fluid controller.")
 	webhookCmd.Flags().IntVar(&webhookPort, "webhook-port", 9443, "Admission webhook listen address.")
 	webhookCmd.Flags().StringVar(&certDir, "webhook-cert-dir", "/etc/k8s-webhook-server/certs", "Admission webhook cert/key dir.")
 	webhookCmd.Flags().StringVarP(&pprofAddr, "pprof-addr", "", "", "The address for pprof to use while exporting profiling results")
+	webhookCmd.Flags().Float32VarP(&kubeClientQPS, "kube-api-qps", "", 20, "QPS to use while talking with kubernetes apiserver.")
+	webhookCmd.Flags().IntVarP(&kubeClientBurst, "kube-api-burst", "", 30, "Burst to use while talking with kubernetes apiserver.")
+
 	webhookCmd.Flags().AddGoFlagSet(flag.CommandLine)
 }
 
@@ -77,19 +96,45 @@ func handle() {
 	// print fluid version
 	fluid.LogVersion()
 
-	cfg, err := ctrl.GetConfig()
-	if err != nil {
-		setupLog.Error(err, "can not get kube config")
-		os.Exit(1)
-	}
+	ctrl.SetLogger(zap.New(func(o *zap.Options) {
+		o.Development = development
+	}, func(o *zap.Options) {
+		o.ZapOpts = append(o.ZapOpts, zapOpt.AddCaller())
+	}, func(o *zap.Options) {
+		var encCfg zapcore.EncoderConfig
+		if !development {
+			encCfg = zapOpt.NewProductionEncoderConfig()
+		} else {
+			encCfg = zapOpt.NewDevelopmentEncoderConfig()
+		}
+		encCfg.EncodeLevel = zapcore.CapitalLevelEncoder
+		encCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+		o.Encoder = zapcore.NewConsoleEncoder(encCfg)
+	}))
 
-	utils.NewPprofServer(setupLog, pprofAddr)
+	cfg := controllers.GetConfigOrDieWithQPSAndBurst(kubeClientQPS, kubeClientBurst)
+	utils.NewPprofServer(setupLog, pprofAddr, fullGoProfile)
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
-		Port:               webhookPort,
-		CertDir:            certDir,
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		WebhookServer: webhook.NewServer(
+			webhook.Options{
+				Port:    webhookPort,
+				CertDir: certDir,
+			},
+		),
+		LeaderElection:   false,
+		LeaderElectionID: "webhook.data.fluid.io",
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&admissionregistrationv1.MutatingWebhookConfiguration{}: {
+					Field: fields.SelectorFromSet(fields.Set{"metadata.name": common.WebhookName}),
+				},
+			},
+		},
 	})
 
 	if err != nil {
@@ -97,35 +142,37 @@ func handle() {
 		os.Exit(1)
 	}
 
-	ctrl.SetLogger(zap.New(func(o *zap.Options) {
-		o.Development = development
-	}, func(o *zap.Options) {
-		o.ZapOpts = append(o.ZapOpts, zapOpt.AddCaller())
-	}, func(o *zap.Options) {
-		if !development {
-			encCfg := zapOpt.NewProductionEncoderConfig()
-			encCfg.EncodeLevel = zapcore.CapitalLevelEncoder
-			encCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-			o.Encoder = zapcore.NewConsoleEncoder(encCfg)
-		}
-	}))
-
 	// get client from mgr
-	client, err := client.New(cfg, client.Options{})
+	k8sClient, err := client.New(cfg, client.Options{})
 	if err != nil {
 		setupLog.Error(err, "initialize kube client failed")
 		os.Exit(1)
 	}
 
-	// patch adminssion web hook  ca bundle
-	certBuilder := fluidwebhook.NewCertificateBuilder(client, setupLog)
-	if err := certBuilder.BuildAndSyncCABundle(common.WebhookServiceName, common.WebhookName, certDir); err != nil {
-		setupLog.Error(err, "patch webhook CABundle failed")
+	// initialize the cert files
+	certBuilder := fluidwebhook.NewCertificateBuilder(k8sClient, setupLog)
+	caCert, err := certBuilder.BuildOrSyncCABundle(common.WebhookServiceName, certDir)
+	if err != nil || len(caCert) == 0 {
+		setupLog.Error(err, "initialize webhook CABundle failed")
+		os.Exit(1)
+	}
+
+	// watch the WebhookConfiguration to patch it
+	if err = watch.SetupWatcherForWebhook(mgr, certBuilder, caCert); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "webhook")
 		os.Exit(1)
 	}
 
 	// register admission handlers
 	handler.Register(mgr, mgr.GetClient(), setupLog)
+
+	// register pod mutating handlers
+	err = plugins.RegisterMutatingHandlers(mgr.GetClient())
+	if err != nil {
+		setupLog.Error(err, "get the register plugins from configmap occurs error")
+		os.Exit(1)
+	}
+
 	setupLog.Info("Register Handler")
 
 	setupLog.Info("starting webhook-manager")

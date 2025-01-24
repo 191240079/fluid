@@ -17,6 +17,9 @@ limitations under the License.
 package recover
 
 import (
+	"os"
+
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/csi/config"
 	"github.com/fluid-cloudnative/fluid/pkg/csi/features"
 	utilfeature "github.com/fluid-cloudnative/fluid/pkg/utils/feature"
@@ -24,8 +27,8 @@ import (
 )
 
 // Register initializes the fuse recover and registers it to the controller manager.
-func Register(mgr manager.Manager, config config.Config) error {
-	fuseRecover, err := NewFuseRecover(mgr.GetClient(), mgr.GetEventRecorderFor("FuseRecover"), mgr.GetAPIReader())
+func Register(mgr manager.Manager, ctx config.RunningContext) error {
+	fuseRecover, err := NewFuseRecover(mgr.GetClient(), mgr.GetEventRecorderFor("FuseRecover"), mgr.GetAPIReader(), ctx.VolumeLocks)
 	if err != nil {
 		return err
 	}
@@ -39,5 +42,9 @@ func Register(mgr manager.Manager, config config.Config) error {
 
 // Enabled checks if the fuse recover should be enabled.
 func Enabled() bool {
+	if os.Getenv("NODEPUBLISH_METHOD") == common.NodePublishMethodSymlink {
+		// not support auto recovery for nodePublishMethod symlink
+		return false
+	}
 	return utilfeature.DefaultFeatureGate.Enabled(features.FuseRecovery)
 }
