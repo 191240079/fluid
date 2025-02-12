@@ -1,4 +1,6 @@
 /*
+Copyright 2023 The Fluid Author.
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -42,6 +44,9 @@ func TransformQuantityToJindoUnit(q *resource.Quantity) (value string) {
 	if strings.HasSuffix(value, "Gi") {
 		value = strings.ReplaceAll(value, "Gi", "g")
 	}
+	if strings.HasSuffix(value, "Mi") {
+		value = strings.ReplaceAll(value, "Mi", "m")
+	}
 	return
 }
 
@@ -57,6 +62,25 @@ func TransformQuantityToGooseFSUnit(q *resource.Quantity) (value string) {
 	return
 	// return units.BytesSize(units.BytesSize(float64(q.Value())))
 
+}
+
+// TransformQuantityToEFCUnit transform a given input quantity to another one
+// that can be recognized by EFC. This is necessary because EFC takes decimal byte units(e.g. KB, MB, GB, etc.)
+// as binary byte units(e.g. Ki, Mi, Gi)
+func TransformQuantityToEFCUnit(q *resource.Quantity) (value string) {
+	value = q.String()
+	if strings.HasSuffix(value, "i") {
+		value = strings.ReplaceAll(value, "i", "B")
+	}
+	return
+}
+
+func TransformEFCUnitToQuantity(value string) (q *resource.Quantity) {
+	if strings.HasSuffix(value, "B") {
+		value = strings.ReplaceAll(value, "B", "i")
+	}
+	result := resource.MustParse(value)
+	return &result
 }
 
 // TransformQuantityToUnits returns a human-readable size in bytes, kibibytes,

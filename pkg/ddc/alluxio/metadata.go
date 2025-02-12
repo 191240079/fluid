@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,23 +26,23 @@ import (
 
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/alluxio/operations"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"k8s.io/client-go/util/retry"
 )
-
-// MetadataSyncResult describes result for asynchronous metadata sync
-type MetadataSyncResult struct {
-	Done      bool
-	StartTime time.Time
-	UfsTotal  string
-	FileNum   string
-	Err       error
-}
 
 // SyncMetadata syncs metadata if necessary
 // For Alluxio Engine, metadata sync is an asynchronous operation, which means
 // you should call this function periodically to make sure the function actually takes effect.
 func (e *AlluxioEngine) SyncMetadata() (err error) {
+
+	//check master exist
+	err = e.checkExistenceOfMaster()
+	if err != nil {
+		e.Log.Error(err, "the master is not exist")
+		return
+	}
+
 	should, err := e.shouldSyncMetadata()
 	if err != nil {
 		e.Log.Error(err, "Failed to check if should sync metadata")
@@ -75,9 +76,20 @@ func (e *AlluxioEngine) shouldSyncMetadata() (should bool, err error) {
 		return should, err
 	}
 
-	//todo(xuzhihao): option to enable/disable automatic metadata sync
+	runtime, err := utils.GetAlluxioRuntime(e.Client, e.name, e.namespace)
+	if err != nil {
+		should = false
+		return should, err
+	}
+
+	if !runtime.Spec.RuntimeManagement.MetadataSyncPolicy.AutoSyncEnabled() {
+		e.Log.V(1).Info("Skip syncing metadata cause runtime.Spec.RuntimeManagement.MetadataSyncPolicy.AutoSync=false", "runtime name", runtime.Name, "runtime namespace", runtime.Namespace)
+		should = false
+		return should, nil
+	}
+
 	//todo: periodical metadata sync
-	if dataset.Status.UfsTotal != "" && dataset.Status.UfsTotal != METADATA_SYNC_NOT_DONE_MSG {
+	if dataset.Status.UfsTotal != "" && dataset.Status.UfsTotal != metadataSyncNotDoneMsg {
 		e.Log.V(1).Info("dataset ufs is ready",
 			"dataset name", dataset.Name,
 			"dataset namespace", dataset.Namespace,
@@ -89,7 +101,7 @@ func (e *AlluxioEngine) shouldSyncMetadata() (should bool, err error) {
 	return should, nil
 }
 
-//  shouldRestoreMetadata checks whether should restore metadata from backup
+// shouldRestoreMetadata checks whether should restore metadata from backup
 func (e *AlluxioEngine) shouldRestoreMetadata() (should bool, err error) {
 	dataset, err := utils.GetDataset(e.Client, e.name, e.namespace)
 	if err != nil {
@@ -173,18 +185,23 @@ func (e *AlluxioEngine) RestoreMetadataInternal() (err error) {
 // syncMetadataInternal does the actual work of metadata sync
 // At any time, there is at most one goroutine working on metadata sync. First call to
 // this function will start a goroutine including the following two steps:
-//   1. load metadata
-//   2. get total size of UFSs
+//  1. load metadata
+//  2. get total size of UFSs
+//
 // Any following calls to this function will try to get result of the working goroutine with a timeout, which
 // ensures the function won't block the following Sync operations(e.g. CheckAndUpdateRuntimeStatus) for a long time.
 func (e *AlluxioEngine) syncMetadataInternal() (err error) {
 	if e.MetadataSyncDoneCh != nil {
 		// Either get result from channel or timeout
 		select {
-		case result := <-e.MetadataSyncDoneCh:
+		case result, ok := <-e.MetadataSyncDoneCh:
 			defer func() {
 				e.MetadataSyncDoneCh = nil
 			}()
+			if !ok {
+				e.Log.Info("Get empty result from a closed MetadataSyncDoneCh")
+				return
+			}
 			e.Log.Info("Get result from MetadataSyncDoneCh", "result", result)
 			if result.Done {
 				e.Log.Info("Metadata sync succeeded", "period", time.Since(result.StartTime))
@@ -196,11 +213,14 @@ func (e *AlluxioEngine) syncMetadataInternal() (err error) {
 					datasetToUpdate := dataset.DeepCopy()
 					datasetToUpdate.Status.UfsTotal = result.UfsTotal
 					datasetToUpdate.Status.FileNum = result.FileNum
+
 					if !reflect.DeepEqual(datasetToUpdate, dataset) {
 						err = e.Client.Status().Update(context.TODO(), datasetToUpdate)
 						if err != nil {
 							return
 						}
+						// Update dataset metrics after a successful status update
+						base.RecordDatasetMetrics(result, datasetToUpdate.Namespace, datasetToUpdate.Name, e.Log)
 					}
 					return
 				})
@@ -212,7 +232,7 @@ func (e *AlluxioEngine) syncMetadataInternal() (err error) {
 				e.Log.Error(result.Err, "Metadata sync failed")
 				return result.Err
 			}
-		case <-time.After(CHECK_METADATA_SYNC_DONE_TIMEOUT_MILLISEC * time.Millisecond):
+		case <-time.After(checkMetadataSyncDoneTimeoutMillisec * time.Millisecond):
 			e.Log.V(1).Info("Metadata sync still in progress")
 		}
 	} else {
@@ -223,8 +243,8 @@ func (e *AlluxioEngine) syncMetadataInternal() (err error) {
 				return
 			}
 			datasetToUpdate := dataset.DeepCopy()
-			datasetToUpdate.Status.UfsTotal = METADATA_SYNC_NOT_DONE_MSG
-			datasetToUpdate.Status.FileNum = METADATA_SYNC_NOT_DONE_MSG
+			datasetToUpdate.Status.UfsTotal = metadataSyncNotDoneMsg
+			datasetToUpdate.Status.FileNum = metadataSyncNotDoneMsg
 			if !reflect.DeepEqual(dataset, datasetToUpdate) {
 				err = e.Client.Status().Update(context.TODO(), datasetToUpdate)
 				if err != nil {
@@ -234,12 +254,12 @@ func (e *AlluxioEngine) syncMetadataInternal() (err error) {
 			return
 		})
 		if err != nil {
-			e.Log.Error(err, "Failed to set UfsTotal to METADATA_SYNC_NOT_DONE_MSG")
+			e.Log.Error(err, "Failed to set UfsTotal to metadataSyncNotDoneMsg")
 		}
-		e.MetadataSyncDoneCh = make(chan MetadataSyncResult)
-		go func(resultChan chan MetadataSyncResult) {
-			defer close(resultChan)
-			result := MetadataSyncResult{
+		e.MetadataSyncDoneCh = make(chan base.MetadataSyncResult)
+		go func(resultChan chan base.MetadataSyncResult) {
+			defer base.SafeClose(resultChan)
+			result := base.MetadataSyncResult{
 				StartTime: time.Now(),
 				UfsTotal:  "",
 			}
@@ -248,7 +268,9 @@ func (e *AlluxioEngine) syncMetadataInternal() (err error) {
 				e.Log.Error(err, "Can't get dataset when syncing metadata", "name", e.name, "namespace", e.namespace)
 				result.Err = err
 				result.Done = false
-				resultChan <- result
+				if closed := base.SafeSend(resultChan, result); closed {
+					e.Log.Info("Recover from sending result to a closed channel", "result", result)
+				}
 				return
 			}
 
@@ -267,7 +289,9 @@ func (e *AlluxioEngine) syncMetadataInternal() (err error) {
 						e.Log.Error(err, fmt.Sprintf("Sync local dir failed when syncing metadata, path: %s", localDirPath), "name", e.name, "namespace", e.namespace)
 						result.Err = err
 						result.Done = false
-						resultChan <- result
+						if closed := base.SafeSend(resultChan, result); closed {
+							e.Log.Info("Recover from sending result to a closed channel", "result", result)
+						}
 						return
 					}
 				}
@@ -278,7 +302,9 @@ func (e *AlluxioEngine) syncMetadataInternal() (err error) {
 				e.Log.Error(err, "LoadMetadata failed when syncing metadata", "name", e.name, "namespace", e.namespace)
 				result.Err = err
 				result.Done = false
-				resultChan <- result
+				if closed := base.SafeSend(resultChan, result); closed {
+					e.Log.Info("Recover from sending result to a closed channel", "result", result)
+				}
 				return
 			}
 			result.Done = true
@@ -303,7 +329,9 @@ func (e *AlluxioEngine) syncMetadataInternal() (err error) {
 			} else {
 				result.Err = nil
 			}
-			resultChan <- result
+			if closed := base.SafeSend(resultChan, result); closed {
+				e.Log.Info("Recover from sending result to a closed channel", "result", result)
+			}
 		}(e.MetadataSyncDoneCh)
 	}
 	return

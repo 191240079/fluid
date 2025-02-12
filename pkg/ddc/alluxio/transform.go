@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,13 +20,17 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base/portallocator"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/tieredstore"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/transformer"
 )
 
 func (e *AlluxioEngine) transform(runtime *datav1alpha1.AlluxioRuntime) (value *Alluxio, err error) {
@@ -33,15 +38,19 @@ func (e *AlluxioEngine) transform(runtime *datav1alpha1.AlluxioRuntime) (value *
 		err = fmt.Errorf("the alluxioRuntime is null")
 		return
 	}
+	defer utils.TimeTrack(time.Now(), "AlluxioRuntime.Transform", "name", runtime.Name)
 
 	dataset, err := utils.GetDataset(e.Client, e.name, e.namespace)
 	if err != nil {
 		return value, err
 	}
 
-	value = &Alluxio{}
+	value = &Alluxio{
+		Owner: transformer.GenerateOwnerReferenceFromObject(runtime),
+	}
 
 	value.FullnameOverride = e.name
+	value.OwnerDatasetId = utils.GetDatasetId(e.namespace, e.name, e.runtimeInfo.GetOwnerDatasetUID())
 
 	// 1.transform the common part
 	err = e.transformCommonPart(runtime, dataset, value)
@@ -67,6 +76,11 @@ func (e *AlluxioEngine) transform(runtime *datav1alpha1.AlluxioRuntime) (value *
 		return
 	}
 
+	err = e.transformPodMetadata(runtime, value)
+	if err != nil {
+		return
+	}
+
 	// 5.transform the hadoop non-default configurations
 	err = e.transformHadoopConfig(runtime, value)
 	if err != nil {
@@ -86,9 +100,16 @@ func (e *AlluxioEngine) transform(runtime *datav1alpha1.AlluxioRuntime) (value *
 	e.optimizeDefaultPropertiesAndFuseForHTTP(runtime, dataset, value)
 
 	// 10.allocate port for fluid engine
-	err = e.allocatePorts(value)
-	if err != nil {
-		return
+	if datav1alpha1.IsHostNetwork(runtime.Spec.Master.NetworkMode) ||
+		datav1alpha1.IsHostNetwork(runtime.Spec.Worker.NetworkMode) {
+		e.Log.Info("allocatePorts for hostnetwork mode")
+		err = e.allocatePorts(value, runtime)
+		if err != nil {
+			return
+		}
+	} else {
+		e.Log.Info("skip allocatePorts for container network mode")
+		e.generateStaticPorts(value)
 	}
 
 	// 11.set engine properties
@@ -105,18 +126,22 @@ func (e *AlluxioEngine) transform(runtime *datav1alpha1.AlluxioRuntime) (value *
 // 2. Transform the common part
 func (e *AlluxioEngine) transformCommonPart(runtime *datav1alpha1.AlluxioRuntime,
 	dataset *datav1alpha1.Dataset,
-	value *Alluxio) (err error) {
+	value *Alluxio,
+) (err error) {
+	value.RuntimeIdentity.Namespace = runtime.Namespace
+	value.RuntimeIdentity.Name = runtime.Name
 
 	image := runtime.Spec.AlluxioVersion.Image
 	imageTag := runtime.Spec.AlluxioVersion.ImageTag
 	imagePullPolicy := runtime.Spec.AlluxioVersion.ImagePullPolicy
+	imagePullSecrets := runtime.Spec.ImagePullSecrets
 
-	value.Image, value.ImageTag, value.ImagePullPolicy = e.parseRuntimeImage(image, imageTag, imagePullPolicy)
+	value.Image, value.ImageTag, value.ImagePullPolicy, value.ImagePullSecrets = e.parseRuntimeImage(image, imageTag, imagePullPolicy, imagePullSecrets)
 
 	value.UserInfo = common.UserInfo{
-		User:    0,
-		FSGroup: 0,
-		Group:   0,
+		User: 0,
+		// FSGroup: 0,
+		Group: 0,
 	}
 
 	// transform init users
@@ -135,7 +160,8 @@ func (e *AlluxioEngine) transformCommonPart(runtime *datav1alpha1.AlluxioRuntime
 	uRootPath, m := utils.UFSPathBuilder{}.GenAlluxioUFSRootPath(dataset.Spec.Mounts)
 	// attach mount options when direct mount ufs endpoint
 	if m != nil {
-		if mOptions, err := e.genUFSMountOptions(*m); err != nil {
+		extractEncryptOption := !IsMountWithConfigMap()
+		if mOptions, err := e.genUFSMountOptions(*m, dataset.Spec.SharedOptions, dataset.Spec.SharedEncryptOptions, extractEncryptOption); err != nil {
 			return err
 		} else {
 			for k, v := range mOptions {
@@ -158,17 +184,16 @@ func (e *AlluxioEngine) transformCommonPart(runtime *datav1alpha1.AlluxioRuntime
 		value.JvmOptions = runtime.Spec.JvmOptions
 	}
 
-	value.Fuse.ShortCircuitPolicy = "local"
-
-	var levels []Level
-
 	runtimeInfo, err := e.getRuntimeInfo()
 	if err != nil {
 		return err
 	}
 
+	// Set tieredstore levels
+	var levels []Level
 	for _, level := range runtimeInfo.GetTieredStoreInfo().Levels {
 
+		mediumType := e.getMediumTypeFromVolumeSource(string(level.MediumType), level)
 		l := tieredstore.GetTieredLevel(runtimeInfo, level.MediumType)
 
 		var paths []string
@@ -180,12 +205,12 @@ func (e *AlluxioEngine) transformCommonPart(runtime *datav1alpha1.AlluxioRuntime
 
 		pathConfigStr := strings.Join(paths, ",")
 		quotaConfigStr := strings.Join(quotas, ",")
-		mediumTypeConfigStr := strings.Join(*utils.FillSliceWithString(string(level.MediumType), len(paths)), ",")
+		mediumTypeConfigStr := strings.Join(*utils.FillSliceWithString(mediumType, len(paths)), ",")
 
 		levels = append(levels, Level{
 			Alias:      string(level.MediumType),
 			Level:      l,
-			Type:       "hostPath",
+			Type:       string(level.VolumeType),
 			Path:       pathConfigStr,
 			MediumType: mediumTypeConfigStr,
 			Low:        level.Low,
@@ -210,28 +235,44 @@ func (e *AlluxioEngine) transformCommonPart(runtime *datav1alpha1.AlluxioRuntime
 		Size:       "30Gi",
 	}
 
-	value.ShortCircuit = ShortCircuit{
-		VolumeType: "emptyDir",
-		Policy:     "local",
-		Enable:     true,
-	}
-
 	if !runtime.Spec.DisablePrometheus {
-		value.Monitoring = ALLUXIO_RUNTIME_METRICS_LABEL
+		value.Monitoring = alluxioRuntimeMetricsLabel
 	}
 
 	// transform Tolerations
 	e.transformTolerations(dataset, value)
 
+	e.transformShortCircuit(runtimeInfo, value)
+
 	return
+}
+
+func (e *AlluxioEngine) transformPodMetadata(runtime *datav1alpha1.AlluxioRuntime, value *Alluxio) (err error) {
+	// transform labels
+	commonLabels := utils.UnionMapsWithOverride(map[string]string{}, runtime.Spec.PodMetadata.Labels)
+	value.Master.Labels = utils.UnionMapsWithOverride(commonLabels, runtime.Spec.Master.PodMetadata.Labels)
+	value.Worker.Labels = utils.UnionMapsWithOverride(commonLabels, runtime.Spec.Worker.PodMetadata.Labels)
+	value.Fuse.Labels = utils.UnionMapsWithOverride(commonLabels, runtime.Spec.Fuse.PodMetadata.Labels)
+
+	// transform annotations
+	commonAnnotations := utils.UnionMapsWithOverride(map[string]string{}, runtime.Spec.PodMetadata.Annotations)
+	value.Master.Annotations = utils.UnionMapsWithOverride(commonAnnotations, runtime.Spec.Master.PodMetadata.Annotations)
+	value.Worker.Annotations = utils.UnionMapsWithOverride(commonAnnotations, runtime.Spec.Worker.PodMetadata.Annotations)
+	value.Fuse.Annotations = utils.UnionMapsWithOverride(commonAnnotations, runtime.Spec.Fuse.PodMetadata.Annotations)
+
+	return nil
 }
 
 // 2. Transform the masters
 func (e *AlluxioEngine) transformMasters(runtime *datav1alpha1.AlluxioRuntime,
 	dataset *datav1alpha1.Dataset,
-	value *Alluxio) (err error) {
-
+	value *Alluxio,
+) (err error) {
 	value.Master = Master{}
+
+	if len(runtime.Spec.Master.ImagePullSecrets) != 0 {
+		value.Master.ImagePullSecrets = runtime.Spec.Master.ImagePullSecrets
+	}
 
 	backupRoot := os.Getenv("FLUID_WORKDIR")
 	if backupRoot == "" {
@@ -261,9 +302,11 @@ func (e *AlluxioEngine) transformMasters(runtime *datav1alpha1.AlluxioRuntime,
 
 	if len(runtime.Spec.Master.Properties) > 0 {
 		value.Master.Properties = runtime.Spec.Master.Properties
+		runtime.Spec.Properties = utils.UnionMapsWithOverride(runtime.Spec.Properties, runtime.Spec.Master.Properties)
 	}
 
-	value.Master.HostNetwork = true
+	// parse master pod network mode
+	value.Master.HostNetwork = datav1alpha1.IsHostNetwork(runtime.Spec.Master.NetworkMode)
 
 	nodeSelector := e.transformMasterSelector(runtime)
 	if len(nodeSelector) != 0 {
@@ -310,6 +353,24 @@ func (e *AlluxioEngine) transformMasters(runtime *datav1alpha1.AlluxioRuntime,
 
 	e.transformResourcesForMaster(runtime, value)
 
+	// transform volumes for master
+	err = e.transformMasterVolumes(runtime, value)
+	if err != nil {
+		e.Log.Error(err, "failed to transform volumes for master")
+	}
+
+	if IsMountWithConfigMap() {
+		e.Log.Info("use configmap to generate mount info")
+		// transform mount secret options
+		nonNativeMounts, err := e.generateNonNativeMountsInfo(dataset)
+		if err != nil {
+			e.Log.Error(err, "generate non native mount info occurs error")
+			return err
+		}
+		value.Master.NonNativeMounts = nonNativeMounts
+		value.Master.MountConfigStorage = ConfigmapStorageName
+		e.transformEncryptOptionsToMasterVolumes(dataset, value)
+	}
 	return
 }
 
@@ -318,12 +379,19 @@ func (e *AlluxioEngine) transformWorkers(runtime *datav1alpha1.AlluxioRuntime, v
 	value.Worker = Worker{}
 	e.optimizeDefaultForWorker(runtime, value)
 
-	if len(value.Worker.NodeSelector) == 0 {
+	if len(runtime.Spec.Worker.ImagePullSecrets) != 0 {
+		value.Worker.ImagePullSecrets = runtime.Spec.Worker.ImagePullSecrets
+	}
+
+	if len(runtime.Spec.Worker.NodeSelector) > 0 {
+		value.Worker.NodeSelector = runtime.Spec.Worker.NodeSelector
+	} else {
 		value.Worker.NodeSelector = map[string]string{}
 	}
 
 	if len(runtime.Spec.Worker.Properties) > 0 {
 		value.Worker.Properties = runtime.Spec.Worker.Properties
+		runtime.Spec.Properties = utils.UnionMapsWithOverride(runtime.Spec.Properties, runtime.Spec.Worker.Properties)
 	}
 
 	if len(runtime.Spec.Worker.Env) > 0 {
@@ -342,16 +410,46 @@ func (e *AlluxioEngine) transformWorkers(runtime *datav1alpha1.AlluxioRuntime, v
 
 	value.Worker.Env["ALLUXIO_WORKER_TIEREDSTORE_LEVEL0_DIRS_PATH"] = value.getTiredStoreLevel0Path(e.name, e.namespace)
 
-	value.Worker.HostNetwork = true
+	// parse work pod network mode
+	value.Worker.HostNetwork = datav1alpha1.IsHostNetwork(runtime.Spec.Worker.NetworkMode)
 
-	e.transformResourcesForWorker(runtime, value)
+	err = e.transformResourcesForWorker(runtime, value)
+	if err != nil {
+		e.Log.Error(err, "failed to transform resource for worker")
+		return err
+	}
+
+	// transform volumes for worker
+	err = e.transformWorkerVolumes(runtime, value)
+	if err != nil {
+		e.Log.Error(err, "failed to transform volumes for worker")
+	}
 
 	return
 }
 
+func (e *AlluxioEngine) generateStaticPorts(value *Alluxio) {
+	value.Master.Ports.Rpc = 19998
+	value.Master.Ports.Web = 19999
+	value.Worker.Ports.Rpc = 29999
+	value.Worker.Ports.Web = 30000
+	value.JobMaster.Ports.Rpc = 20001
+	value.JobMaster.Ports.Web = 20002
+	value.JobWorker.Ports.Rpc = 30001
+	value.JobWorker.Ports.Web = 30003
+	value.JobWorker.Ports.Data = 30002
+	if e.runtime.Spec.APIGateway.Enabled {
+		value.APIGateway.Ports.Rest = 39999
+	}
+	if e.runtime.Spec.Master.Replicas > 1 {
+		value.Master.Ports.Embedded = 19200
+		value.JobMaster.Ports.Embedded = 20003
+	}
+}
+
 // 8.allocate port for fluid engine
-func (e *AlluxioEngine) allocatePorts(value *Alluxio) error {
-	expectedPortNum := PORT_NUM
+func (e *AlluxioEngine) allocatePorts(value *Alluxio, runtime *datav1alpha1.AlluxioRuntime) error {
+	expectedPortNum := portNum
 
 	if e.runtime.Spec.APIGateway.Enabled {
 		expectedPortNum += 1
@@ -374,37 +472,41 @@ func (e *AlluxioEngine) allocatePorts(value *Alluxio) error {
 	}
 
 	index := 0
-	value.Master.Ports.Rpc = allocatedPorts[index]
-	index++
-	value.Master.Ports.Web = allocatedPorts[index]
-	index++
-	value.Worker.Ports.Rpc = allocatedPorts[index]
-	index++
-	value.Worker.Ports.Web = allocatedPorts[index]
-	index++
-	value.JobMaster.Ports.Rpc = allocatedPorts[index]
-	index++
-	value.JobMaster.Ports.Web = allocatedPorts[index]
-	index++
-	value.JobWorker.Ports.Rpc = allocatedPorts[index]
-	index++
-	value.JobWorker.Ports.Web = allocatedPorts[index]
-	index++
-	value.JobWorker.Ports.Data = allocatedPorts[index]
-	index++
+
+	value.Master.Ports.Rpc, index = e.allocateSinglePort(value, "alluxio.master.rpc.port", allocatedPorts, index, runtime.Spec.Master.Ports, "rpc")
+	value.Master.Ports.Web, index = e.allocateSinglePort(value, "alluxio.master.web.port", allocatedPorts, index, runtime.Spec.Master.Ports, "web")
+	value.Worker.Ports.Rpc, index = e.allocateSinglePort(value, "alluxio.worker.rpc.port", allocatedPorts, index, runtime.Spec.Worker.Ports, "rpc")
+	value.Worker.Ports.Web, index = e.allocateSinglePort(value, "alluxio.worker.web.port", allocatedPorts, index, runtime.Spec.Worker.Ports, "web")
+	value.JobMaster.Ports.Rpc, index = e.allocateSinglePort(value, "alluxio.job.master.rpc.port", allocatedPorts, index, runtime.Spec.JobMaster.Ports, "rpc")
+	value.JobMaster.Ports.Web, index = e.allocateSinglePort(value, "alluxio.job.master.web.port", allocatedPorts, index, runtime.Spec.JobMaster.Ports, "web")
+	value.JobWorker.Ports.Rpc, index = e.allocateSinglePort(value, "alluxio.job.worker.rpc.port", allocatedPorts, index, runtime.Spec.JobWorker.Ports, "rpc")
+	value.JobWorker.Ports.Web, index = e.allocateSinglePort(value, "alluxio.job.worker.web.port", allocatedPorts, index, runtime.Spec.JobWorker.Ports, "web")
+	value.JobWorker.Ports.Data, index = e.allocateSinglePort(value, "alluxio.job.worker.data.port", allocatedPorts, index, runtime.Spec.JobWorker.Ports, "data")
 
 	if e.runtime.Spec.APIGateway.Enabled {
-		value.APIGateway.Ports.Rest = allocatedPorts[index]
-		index++
+		value.APIGateway.Ports.Rest, index = e.allocateSinglePort(value, "alluxio.proxy.web.port", allocatedPorts, index, runtime.Spec.APIGateway.Ports, "web")
 	}
 
 	if e.runtime.Spec.Master.Replicas > 1 {
-		value.Master.Ports.Embedded = allocatedPorts[index]
-		index++
-		value.JobMaster.Ports.Embedded = allocatedPorts[index]
+		value.Master.Ports.Embedded, index = e.allocateSinglePort(value, "alluxio.master.embedded.journal.port", allocatedPorts, index, runtime.Spec.Master.Ports, "embeddedJournal")
+		value.JobMaster.Ports.Embedded, _ = e.allocateSinglePort(value, "alluxio.job.master.embedded.journal.port", allocatedPorts, index, runtime.Spec.JobMaster.Ports, "embeddedJournal")
 	}
 
 	return nil
+}
+
+func (e *AlluxioEngine) allocateSinglePort(value *Alluxio, key string, allocatedPorts []int, index int, runtimeValue map[string]int, runtimeKey string) (newPort, newIndex int) {
+	var port int
+	if newVal, found := value.Properties[key]; found {
+		port, _ = strconv.Atoi(newVal)
+	} else if runtimeVal, found := runtimeValue[runtimeKey]; found {
+		port = runtimeVal
+	} else {
+		port = allocatedPorts[index]
+		index++
+	}
+
+	return port, index
 }
 
 func (e *AlluxioEngine) transformMasterSelector(runtime *datav1alpha1.AlluxioRuntime) map[string]string {
@@ -416,10 +518,81 @@ func (e *AlluxioEngine) transformMasterSelector(runtime *datav1alpha1.AlluxioRun
 }
 
 func (e *AlluxioEngine) transformPlacementMode(dataset *datav1alpha1.Dataset, value *Alluxio) {
-
 	value.PlacementMode = string(dataset.Spec.PlacementMode)
 	if len(value.PlacementMode) == 0 {
 		value.PlacementMode = string(datav1alpha1.ExclusiveMode)
 	}
+}
 
+func (e *AlluxioEngine) transformShortCircuit(runtimeInfo base.RuntimeInfoInterface, value *Alluxio) {
+	value.Fuse.ShortCircuitPolicy = "local"
+
+	enableShortCircuit := true
+
+	// Disable short circuit when using emptyDir as the volume type of any tieredstore level.
+	for _, level := range runtimeInfo.GetTieredStoreInfo().Levels {
+		if level.VolumeType == common.VolumeTypeEmptyDir {
+			enableShortCircuit = false
+			break
+		}
+	}
+
+	value.ShortCircuit = ShortCircuit{
+		VolumeType: "emptyDir",
+		Policy:     "local",
+		Enable:     enableShortCircuit,
+	}
+
+	if !enableShortCircuit {
+		value.Properties["alluxio.user.short.circuit.enabled"] = "false"
+	}
+}
+
+func (e *AlluxioEngine) generateNonNativeMountsInfo(dataset *datav1alpha1.Dataset) ([]string, error) {
+	var nonNativeMounts []string
+	for _, mount := range dataset.Spec.Mounts {
+		if common.IsFluidNativeScheme(mount.MountPoint) {
+			continue
+		}
+
+		mOptions, err := e.genUFSMountOptions(mount, dataset.Spec.SharedOptions, dataset.Spec.SharedEncryptOptions, false)
+		if err != nil {
+			return nil, err
+		}
+
+		alluxioPath := utils.UFSPathBuilder{}.GenUFSPathInUnifiedNamespace(mount)
+
+		var mountArgs []string
+
+		// ensure the first two element is the alluxio mount point and ufs path, used in mount.sh
+		mountArgs = append(mountArgs, alluxioPath, mount.MountPoint)
+
+		if mount.ReadOnly {
+			mountArgs = append(mountArgs, "--readonly")
+		}
+
+		if mount.Shared {
+			mountArgs = append(mountArgs, "--shared")
+		}
+
+		for k, v := range mOptions {
+			mountArgs = append(mountArgs, "--option", fmt.Sprintf("%s=%s", k, v))
+		}
+
+		// use space as seperator as it will append to `alluxio fs mount` directly.
+		nonNativeMounts = append(nonNativeMounts, strings.Join(mountArgs, " "))
+	}
+	return nonNativeMounts, nil
+}
+
+func (e *AlluxioEngine) getMediumTypeFromVolumeSource(defaultMediumType string, level base.Level) string {
+	mediumType := defaultMediumType
+
+	if level.VolumeType == common.VolumeTypeEmptyDir {
+		if level.VolumeSource.EmptyDir != nil {
+			mediumType = string(level.VolumeSource.EmptyDir.Medium)
+		}
+	}
+
+	return mediumType
 }

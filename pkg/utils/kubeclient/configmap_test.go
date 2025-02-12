@@ -16,7 +16,11 @@ limitations under the License.
 package kubeclient
 
 import (
+	"reflect"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	v1 "k8s.io/api/core/v1"
@@ -176,6 +180,99 @@ func TestDeleteConfigMap(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := DeleteConfigMap(client, tt.args.name, tt.args.namespace); err != nil {
 				t.Errorf("testcase %v DeleteConfigMap()'s err is %v", tt.name, err)
+			}
+		})
+	}
+}
+
+func TestCopyConfigMap(t *testing.T) {
+	type args struct {
+		client    client.Client
+		src       types.NamespacedName
+		dst       types.NamespacedName
+		reference metav1.OwnerReference
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "copy success",
+			args: args{
+				client: fake.NewFakeClient(&v1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "src-config",
+						Namespace: "src",
+					},
+					Data: map[string]string{
+						"check.sh": "/bin/sh check",
+					},
+				}),
+				src: types.NamespacedName{
+					Name:      "src-config",
+					Namespace: "src",
+				},
+				dst: types.NamespacedName{
+					Name:      "src-config",
+					Namespace: "dst",
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := CopyConfigMap(tt.args.client, tt.args.src, tt.args.dst, tt.args.reference); (err != nil) != tt.wantErr {
+				t.Errorf("CopyConfigMap() error = %v, wantErr %v", err, tt.wantErr)
+				_, err := GetConfigmapByName(tt.args.client, tt.args.dst.Name, tt.args.dst.Namespace)
+				if err != nil {
+					t.Errorf("Get copyied configmap error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestCreateConfigMapExist(t *testing.T) {
+	namespace := "default"
+
+	client := fake.NewFakeClientWithScheme(testScheme)
+
+	type args struct {
+		name      string
+		namespace string
+		key       string
+		data      []byte
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			name: "create configmap",
+			args: args{
+				name:      "cm",
+				namespace: namespace,
+				key:       "data",
+				data:      []byte("this is data."),
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := CreateConfigMap(client, tt.args.name, tt.args.namespace, tt.args.key, tt.args.data, "")
+			if err != nil {
+				t.Errorf("testcase %v CreateConfigMap() err is %v", tt.name, err)
+			}
+			configmap, err := GetConfigmapByName(client, tt.args.name, tt.args.namespace)
+			if err != nil {
+				t.Errorf("testcase %v GetConfigmapByName()'s err is %v", tt.name, err)
+			}
+			if !reflect.DeepEqual(configmap.Data[tt.args.key], string(tt.args.data)) {
+				t.Errorf("testcase %v CreateConfigMap() configmap data is %v, want %v", tt.name, configmap.Data[tt.args.key], tt.args.data)
 			}
 		})
 	}

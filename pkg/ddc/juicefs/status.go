@@ -18,9 +18,10 @@ package juicefs
 
 import (
 	"context"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 	"reflect"
 	"time"
+
+	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 
 	"k8s.io/client-go/util/retry"
 
@@ -44,11 +45,14 @@ func (j *JuiceFSEngine) CheckAndUpdateRuntimeStatus() (ready bool, err error) {
 		return ready, err
 	}
 
+	var workerNodeAffinity = kubeclient.MergeNodeSelectorAndNodeAffinity(workers.Spec.Template.Spec.NodeSelector, workers.Spec.Template.Spec.Affinity)
+
 	err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		runtime, err := j.getRuntime()
 		if err != nil {
 			return err
 		}
+		j.runtime = runtime
 
 		runtimeToUpdate := runtime.DeepCopy()
 		if reflect.DeepEqual(runtime.Status, runtimeToUpdate.Status) {
@@ -65,13 +69,12 @@ func (j *JuiceFSEngine) CheckAndUpdateRuntimeStatus() (ready bool, err error) {
 			runtimeToUpdate.Status.CacheStates = map[common.CacheStateName]string{}
 		}
 
-		runtimeToUpdate.Status.CacheStates[common.CacheCapacity] = states.cacheCapacity
+		// set node affinity
+		runtimeToUpdate.Status.CacheAffinity = workerNodeAffinity
 
-		// Todo:show this infomathion when complete dataload function
-		//runtimeToUpdate.Status.CacheStates[common.CachedPercentage] = states.cachedPercentage
-		//runtimeToUpdate.Status.CacheStates[common.Cached] = states.cached
-		runtimeToUpdate.Status.CacheStates[common.CachedPercentage] = "N/A"
-		runtimeToUpdate.Status.CacheStates[common.Cached] = "N/A"
+		runtimeToUpdate.Status.CacheStates[common.CacheCapacity] = states.cacheCapacity
+		runtimeToUpdate.Status.CacheStates[common.CachedPercentage] = states.cachedPercentage
+		runtimeToUpdate.Status.CacheStates[common.Cached] = states.cached
 		// 1. Update cache hit ratio
 		runtimeToUpdate.Status.CacheStates[common.CacheHitRatio] = states.cacheHitRatio
 
@@ -81,7 +84,10 @@ func (j *JuiceFSEngine) CheckAndUpdateRuntimeStatus() (ready bool, err error) {
 		runtimeToUpdate.Status.WorkerNumberReady = int32(workers.Status.ReadyReplicas)
 		runtimeToUpdate.Status.WorkerNumberUnavailable = int32(*workers.Spec.Replicas - workers.Status.ReadyReplicas)
 		runtimeToUpdate.Status.WorkerNumberAvailable = int32(workers.Status.CurrentReplicas)
-		if workers.Status.ReadyReplicas > 0 {
+		if runtime.Replicas() == 0 {
+			runtimeToUpdate.Status.WorkerPhase = data.RuntimePhaseReady
+			workerReady = true
+		} else if workers.Status.ReadyReplicas > 0 {
 			if runtime.Replicas() == workers.Status.ReadyReplicas {
 				runtimeToUpdate.Status.WorkerPhase = data.RuntimePhaseReady
 				workerReady = true
@@ -101,6 +107,8 @@ func (j *JuiceFSEngine) CheckAndUpdateRuntimeStatus() (ready bool, err error) {
 		if ready && runtimeToUpdate.Status.SetupDuration == "" {
 			runtimeToUpdate.Status.SetupDuration = utils.CalculateDuration(runtimeToUpdate.CreationTimestamp.Time, time.Now())
 		}
+
+		runtimeToUpdate.Status.ValueFileConfigmap = j.getHelmValuesConfigMapName()
 
 		if !reflect.DeepEqual(runtime.Status, runtimeToUpdate.Status) {
 			err = j.Client.Status().Update(context.TODO(), runtimeToUpdate)

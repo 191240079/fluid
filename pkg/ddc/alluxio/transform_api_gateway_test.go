@@ -17,8 +17,9 @@ limitations under the License.
 package alluxio
 
 import (
-	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"testing"
+
+	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 )
 
 func TestTransformAPIGateway(t *testing.T) {
@@ -81,7 +82,7 @@ func TestTransformAPIGateway(t *testing.T) {
 				t.Errorf("should return err if it's possible to lead to nil pointer")
 			}
 		} else if test.runtime.Spec.APIGateway.Enabled != test.value.APIGateway.Enabled {
-			t.Errorf("testcase cannot paas beacuse of wrong result,%t != %t",
+			t.Errorf("testcase cannot paas because of wrong result,%t != %t",
 				test.runtime.Spec.APIGateway.Enabled,
 				test.value.APIGateway.Enabled)
 		}

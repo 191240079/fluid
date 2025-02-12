@@ -18,16 +18,15 @@ package juicefs
 
 import (
 	"fmt"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubectl"
-	"gopkg.in/yaml.v2"
-	"io/ioutil"
 	"os"
+
+	"sigs.k8s.io/yaml"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/helm"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 )
 
 // setup fuse
@@ -41,7 +40,7 @@ func (j *JuiceFSEngine) setupMasterInternal() (err error) {
 		return
 	}
 
-	valuefileName, err := j.generateJuicefsValueFile(runtime)
+	valueFileName, err := j.generateJuicefsValueFile(runtime)
 	if err != nil {
 		return
 	}
@@ -56,13 +55,13 @@ func (j *JuiceFSEngine) setupMasterInternal() (err error) {
 		return
 	}
 
-	return helm.InstallRelease(j.name, j.namespace, valuefileName, chartName)
+	return helm.InstallRelease(j.name, j.namespace, valueFileName, chartName)
 }
 
 // generate juicefs struct
 func (j *JuiceFSEngine) generateJuicefsValueFile(runtime *datav1alpha1.JuiceFSRuntime) (valueFileName string, err error) {
 	//0. Check if the configmap exists
-	err = kubeclient.DeleteConfigMap(j.Client, j.getConfigmapName(), j.namespace)
+	err = kubeclient.DeleteConfigMap(j.Client, j.getHelmValuesConfigMapName(), j.namespace)
 	if err != nil {
 		j.Log.Error(err, "Failed to clean value files")
 		return
@@ -84,22 +83,24 @@ func (j *JuiceFSEngine) generateJuicefsValueFile(runtime *datav1alpha1.JuiceFSRu
 	}
 
 	//2. Get the template value file
-	valueFile, err := ioutil.TempFile(os.TempDir(), fmt.Sprintf("%s-%s-values.yaml", j.name, j.runtimeType))
+	valueFile, err := os.CreateTemp(os.TempDir(), fmt.Sprintf("%s-%s-values.yaml", j.name, j.engineImpl))
 	if err != nil {
 		j.Log.Error(err, "failed to create value file", "valueFile", valueFile.Name())
 		return valueFileName, err
 	}
 
 	valueFileName = valueFile.Name()
-	j.Log.V(1).Info("Save the values file", "valueFile", valueFileName)
+	j.Log.Info("Save the values file", "valueFile", valueFileName)
 
-	err = ioutil.WriteFile(valueFileName, data, 0400)
+	err = os.WriteFile(valueFileName, data, 0400)
 	if err != nil {
 		return
 	}
 
 	//3. Save the configfile into configmap
-	err = kubectl.CreateConfigMapFromFile(j.getConfigmapName(), "data", valueFileName, j.namespace)
+	runtimeInfo := j.runtimeInfo
+	ownerDatasetId := utils.GetDatasetId(runtimeInfo.GetNamespace(), runtimeInfo.GetName(), runtimeInfo.GetOwnerDatasetUID())
+	err = kubeclient.CreateConfigMap(j.Client, j.getHelmValuesConfigMapName(), j.namespace, "data", data, ownerDatasetId)
 	if err != nil {
 		return
 	}
@@ -107,6 +108,6 @@ func (j *JuiceFSEngine) generateJuicefsValueFile(runtime *datav1alpha1.JuiceFSRu
 	return valueFileName, err
 }
 
-func (j *JuiceFSEngine) getConfigmapName() string {
-	return fmt.Sprintf("%s-%s-values", j.name, j.runtimeType)
+func (j *JuiceFSEngine) getHelmValuesConfigMapName() string {
+	return fmt.Sprintf("%s-%s-values", j.name, j.engineImpl)
 }

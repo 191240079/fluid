@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Author.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -492,6 +493,7 @@ func TestShouldRemoveProtectionFinalizer(t *testing.T) {
 			Annotations:       common.ExpectedFluidAnnotations,
 			Namespace:         namespace,
 			DeletionTimestamp: &now,
+			Finalizers:        []string{"another-finalizer"},
 		},
 		Spec: v1.PersistentVolumeClaimSpec{},
 	}}
@@ -572,75 +574,60 @@ func TestShouldRemoveProtectionFinalizer(t *testing.T) {
 	}
 }
 
-func TestIsDatasetPVC(t *testing.T) {
-
-	namespace := "default"
-	datasetName := "createdByFluid"
-	expectFluidAnnotations := common.ExpectedFluidAnnotations
-	expectFluidAnnotations[common.LabelAnnotationStorageCapacityPrefix+namespace+"-"+datasetName] = "true"
-	testPVCInputs := []*v1.PersistentVolumeClaim{{
-		ObjectMeta: metav1.ObjectMeta{Name: "notCreatedByFluid",
-			Namespace: namespace},
-		Spec: v1.PersistentVolumeClaimSpec{},
-	}, {
-		ObjectMeta: metav1.ObjectMeta{Name: "createdByFluid",
-			Labels:    expectFluidAnnotations,
-			Namespace: namespace},
-		Spec: v1.PersistentVolumeClaimSpec{},
-	}}
-
-	testPVCs := []runtime.Object{}
-
-	for _, pvc := range testPVCInputs {
-		testPVCs = append(testPVCs, pvc.DeepCopy())
-	}
-
-	client := fake.NewFakeClientWithScheme(testScheme, testPVCs...)
-
+func TestGetReferringDatasetPVCInfo(t *testing.T) {
 	type args struct {
-		name      string
-		namespace string
+		pvc *v1.PersistentVolumeClaim
 	}
 	tests := []struct {
-		name  string
-		args  args
-		found bool
+		name          string
+		args          args
+		wantOk        bool
+		wantName      string
+		wantNamespace string
 	}{
 		{
-			name: "volume for dataset doesn't exist",
+			name: "is-referring-pvc",
 			args: args{
-				name:      "notExist",
-				namespace: namespace,
+				pvc: &v1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "demo",
+						Namespace: "ref",
+						Labels: map[string]string{
+							common.LabelAnnotationDatasetReferringName:      "dataset",
+							common.LabelAnnotationDatasetReferringNameSpace: "fluid",
+						},
+					},
+				},
 			},
-			found: false,
+			wantOk:        true,
+			wantName:      "dataset",
+			wantNamespace: "fluid",
 		},
 		{
-			name: "volume notCreatedByFluid is not created by fluid",
+			name: "is-referring-pvc",
 			args: args{
-				name:      "notCreatedByFluid",
-				namespace: namespace,
+				pvc: &v1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "demo-error",
+						Namespace: "ref",
+						Labels:    map[string]string{},
+					},
+				},
 			},
-			found: false,
-		},
-		{
-			name: "volume is created by fluid",
-			args: args{
-				name:      datasetName,
-				namespace: namespace,
-			},
-			found: true,
-		}, {
-			name: "volume is not created by fluid 2",
-			args: args{
-				name: "notCreatedByFluid2",
-			},
-			found: false,
+			wantOk: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if found, _ := IsDatasetPVC(client, tt.args.name, tt.args.namespace); found != tt.found {
-				t.Errorf("testcase %v IsDatasetPVC() = %v, want %v", tt.name, found, tt.found)
+			gotOk, gotName, gotNamespace := GetReferringDatasetPVCInfo(tt.args.pvc)
+			if gotOk != tt.wantOk {
+				t.Errorf("GetReferringDatasetPVCInfo() gotOk = %v, want %v", gotOk, tt.wantOk)
+			}
+			if gotName != tt.wantName {
+				t.Errorf("GetReferringDatasetPVCInfo() gotName = %v, want %v", gotName, tt.wantName)
+			}
+			if gotNamespace != tt.wantNamespace {
+				t.Errorf("GetReferringDatasetPVCInfo() gotNamespace = %v, want %v", gotNamespace, tt.wantNamespace)
 			}
 		})
 	}

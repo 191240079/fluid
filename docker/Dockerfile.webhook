@@ -1,5 +1,6 @@
 # Build the dataset-controller manager binary
-FROM golang:1.16.8 as builder
+# golang:1.22.10-bullseye
+FROM golang@sha256:1e3e0cdab013c62de8c3f4fe942138255e6a367b90079220ed6f3853a34329ff as builder
 
 WORKDIR /go/src/github.com/fluid-cloudnative/fluid
 COPY . .
@@ -8,23 +9,20 @@ RUN make webhook-build && \
 	cp bin/fluid-webhook /go/bin/fluid-webhook
 
 # Debug
-RUN go get github.com/go-delve/delve/cmd/dlv
+#RUN go install github.com/go-delve/delve/cmd/dlv@v1.8.2
 
-FROM alpine:3.10
-RUN apk add --update curl tzdata iproute2 bash libc6-compat vim &&  \
+# alpine:3.18
+FROM alpine@sha256:11e21d7b981a59554b3f822c49f6e9f57b6068bb74f49c4cd5cc4c663c7e5160
+RUN apk add --update bash curl iproute2 libc6-compat tzdata vim &&  \
 	rm -rf /var/cache/apk/* && \
 	cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
 	echo "Asia/Shanghai" >  /etc/timezone
 
-ENV K8S_VERSION v1.14.8
-RUN curl -o /usr/local/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/${K8S_VERSION}/bin/linux/amd64/kubectl && chmod +x /usr/local/bin/kubectl
-
 COPY --from=builder /go/bin/fluid-webhook /usr/local/bin/fluid-webhook
-COPY --from=builder /go/bin/dlv /usr/local/bin/dlv
+#COPY --from=builder /go/bin/dlv /usr/local/bin/dlv
 
 RUN mkdir -p /etc/k8s-webhook-server/certs && \
 	chmod -R u+w /etc/k8s-webhook-server/certs && \ 
 	chmod -R u+x /usr/local/bin/
-
 
 CMD ["fluid-webhook", "start"]

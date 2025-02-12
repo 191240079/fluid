@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Fluid Authors.
+Copyright 2022 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/fluid-cloudnative/fluid/pkg/application/inject/fuse/mutator"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
@@ -27,32 +28,24 @@ import (
 	"github.com/fluid-cloudnative/fluid/pkg/utils/applications/defaultapp"
 	podapp "github.com/fluid-cloudnative/fluid/pkg/utils/applications/pod"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/applications/unstructured"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	unstructuredtype "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var (
-	log logr.Logger
-)
-
-func init() {
-	log = ctrl.Log.WithName("fuse")
-}
-
 type Injector struct {
 	client client.Client
+	log    logr.Logger
 }
 
 func NewInjector(client client.Client) *Injector {
 	return &Injector{
 		client: client,
+		log:    ctrl.Log.WithName("fuse-injector"),
 	}
 }
 
@@ -71,7 +64,13 @@ func (s *Injector) InjectPod(in *corev1.Pod, runtimeInfos map[string]base.Runtim
 	return
 }
 
-func (s *Injector) inject(in runtime.Object, pvcName string, runtimeInfo base.RuntimeInfoInterface) (out runtime.Object, err error) {
+// inject takes the following steps to inject fuse container:
+// 1. Determine the type of the input runtime.Object and wrap it as a FluidApplication which contains one or more PodSpecs.
+// 2. For each PodSpec in the FluidApplication, and for each runtimeInfo involved, inject the PodSpec according to the runtimeInfo and the serverless platform (i.e. func `MutateWithRuntimeInfo()`)
+// 3. Pod-level mutation according to the serverless platform (i.e. func `PostMutate()`)
+// 4. Add injection done label to the PodSpec, indicating mutation is done for the PodSpec.
+// 5. When all the PodSpecs are mutated, return the modified runtime.Object
+func (s *Injector) inject(in runtime.Object, runtimeInfos map[string]base.RuntimeInfoInterface) (out runtime.Object, err error) {
 	out = in.DeepCopyObject()
 
 	var (
@@ -93,7 +92,7 @@ func (s *Injector) inject(in runtime.Object, pvcName string, runtimeInfo base.Ru
 				return nil, err
 			}
 
-			r, err := s.inject(obj, pvcName, runtimeInfo)
+			r, err := s.inject(obj, runtimeInfos)
 			if err != nil {
 				return nil, err
 			}
@@ -131,185 +130,98 @@ func (s *Injector) inject(in runtime.Object, pvcName string, runtimeInfo base.Ru
 		objectMeta = outValue.FieldByName("ObjectMeta").Interface().(metav1.ObjectMeta)
 		application = defaultapp.NewApplication(obj)
 	default:
-		log.Info("No supported K8s Type", "v", v)
+		s.log.Info("No supported K8s Type", "v", v)
 		return out, fmt.Errorf("no supported K8s Type %v", v)
 	}
 
-	namespacedName := types.NamespacedName{
-		Namespace: objectMeta.Namespace,
-		Name:      objectMeta.Name,
-	}
-	kind := typeMeta.Kind
-
+	s.log.V(1).Info("Inject Fluid application", "objectMeta.Name", objectMeta.Name, "objectMeta.GenerateName", objectMeta.GenerateName, "objectMeta.Namespace", objectMeta.Namespace, "kind", typeMeta.Kind)
 	pods, err := application.GetPodSpecs()
 	if err != nil {
 		return
 	}
 
 	for _, pod := range pods {
-		metaObj, err := pod.GetMetaObject()
+		podSpecs, err := mutator.CollectFluidObjectSpecs(pod)
 		if err != nil {
+			s.log.Error(err, "failed to collect fluid object specs from a pod", "fluid application name", objectMeta.Name)
+		}
+
+		// Pod may have either Name or GenerateName set, take it as podName for log messages
+		podName := podSpecs.MetaObj.Name
+		if len(podName) == 0 {
+			podName = podSpecs.MetaObj.GenerateName
+		}
+
+		shouldInject, err := s.shouldInject(pod)
+		if err != nil {
+			s.log.Error(err, "failed to check if should inject pod", "pod name", podName)
 			return out, err
 		}
 
-		// if it's not serverless enable or injection is done, skip
-		if !utils.ServerlessEnabled(metaObj.Labels) || utils.InjectSidecarDone(metaObj.Labels) {
+		if !shouldInject {
 			continue
 		}
 
-		// 1. check if the pod spec has fluid volume claim
-		injectFuseContainer := true
-		enableCacheDir := utils.InjectCacheDirEnabled(metaObj.Labels)
-		template, err := runtimeInfo.GetTemplateToInjectForFuse(pvcName, enableCacheDir)
+		platform := s.getServerlessPlatformFromMeta(podSpecs.MetaObj)
+		if len(platform) == 0 {
+			return out, fmt.Errorf("can't find any supported platform-specific mutator in pod's metadata")
+		}
+
+		mutatorBuildArgs := mutator.MutatorBuildArgs{
+			Client: s.client,
+			Log:    s.log,
+			Specs:  podSpecs,
+			Options: common.FuseSidecarInjectOption{
+				EnableCacheDir:             utils.InjectCacheDirEnabled(podSpecs.MetaObj.Labels),
+				EnableUnprivilegedSidecar:  utils.FuseSidecarUnprivileged(podSpecs.MetaObj.Labels),
+				SkipSidecarPostStartInject: utils.SkipSidecarPostStartInject(podSpecs.MetaObj.Labels),
+			},
+			ExtraArgs: mutator.FindExtraArgsFromMetadata(podSpecs.MetaObj, platform),
+		}
+
+		s.log.V(1).Info("building mutator with mutatorBuildArgs", "mutatorBuildArgs", mutatorBuildArgs)
+		mtt, err := mutator.BuildMutator(mutatorBuildArgs, platform)
 		if err != nil {
 			return out, err
 		}
 
-		// 2. Determine if the volumeMounts contain the target pvc, if not found, skip. The reason is that if this `pod` spec doesn't have volumeMounts
-		volumeMounts, err := pod.GetVolumeMounts()
-		if err != nil {
+		if err = s.injectCheckMountReadyScript(podSpecs, runtimeInfos); err != nil {
+			s.log.Error(err, "failed to injectCheckMountReadyScript()", "pod name", podName)
 			return out, err
 		}
 
-		// 3. find the volumes with the target pvc name, and replace it with the fuse's hostpath volume
-		volumes, err := pod.GetVolumes()
+		// Determine how many sidecars are already injected. This is necessary in multi-round sidecar injection.
+		injectedSidecars, err := findInjectedSidecars(pod)
 		if err != nil {
+			s.log.Error(err, "failed to find injected sidecars from pod")
 			return out, err
 		}
 
-		pvcNames := kubeclient.PVCNames(volumeMounts, volumes)
-		found := utils.ContainsString(pvcNames, pvcName)
-		if !found {
-			log.Info("Not able to find the fluid pvc in pod spec, skip",
-				"name", objectMeta.Name,
-				"namespace", objectMeta.Namespace,
-				"pvc", pvcName,
-				"candidate pvcs", pvcNames)
-			continue
-		}
+		idx := len(injectedSidecars)
+		for _, pvcName := range utils.OrderedKeys(runtimeInfos) {
+			runtimeInfo := runtimeInfos[pvcName]
+			s.log.Info("Start mutating pvc in pod spec", "pod name", podName, "pvc name", pvcName)
+			// Append no suffix to fuse container name unless there are multiple ones.
+			containerNameSuffix := fmt.Sprintf("-%d", idx)
 
-		volumeNames := []string{}
-		datasetVolumeNames := []string{}
-		for i, volume := range volumes {
-			if volume.PersistentVolumeClaim != nil && volume.PersistentVolumeClaim.ClaimName == pvcName {
-				name := volume.Name
-				volumes[i] = template.VolumesToUpdate[0]
-				volumes[i].Name = name
-				datasetVolumeNames = append(datasetVolumeNames, name)
-			}
-			volumeNames = append(volumeNames, volume.Name)
-		}
-
-		// 4. add the volumes
-		// key is the old volume name, value is the new volume name
-		volumeNamesConflict := map[string]string{}
-		if len(template.VolumesToAdd) > 0 {
-			log.V(1).Info("Before append volume", "original", volumes)
-			// volumes = append(volumes, template.VolumesToAdd...)
-			for _, volumeToAdd := range template.VolumesToAdd {
-				if !utils.ContainsString(volumeNames, volumeToAdd.Name) {
-					volumes = append(volumes, volumeToAdd)
-				} else {
-					i := 0
-					newVolumeName := utils.ReplacePrefix(volumeToAdd.Name, common.Fluid)
-					for {
-						if !utils.ContainsString(volumeNames, newVolumeName) {
-							break
-						} else {
-							if i > 100 {
-								log.Info("retry  the volume name because duplicate name more than 100 times, then give up",
-									"name", objectMeta.Name,
-									"namespace", objectMeta.Namespace,
-									"volumeName", newVolumeName)
-								return out, fmt.Errorf("retry  the volume name %v for object %v because duplicate name more than 100 times, then give up", newVolumeName, types.NamespacedName{
-									Namespace: objectMeta.Namespace,
-									Name:      objectMeta.Name,
-								})
-							}
-							suffix := common.Fluid + "-" + utils.RandomAlphaNumberString(3)
-							newVolumeName = utils.ReplacePrefix(volumeToAdd.Name, suffix)
-							log.Info("retry  the volume name because duplicate name",
-								"name", objectMeta.Name,
-								"namespace", objectMeta.Namespace,
-								"volumeName", newVolumeName)
-							i++
-						}
-					}
-
-					volume := volumeToAdd.DeepCopy()
-					volume.Name = newVolumeName
-					volumeNamesConflict[volumeToAdd.Name] = volume.Name
-					volumeNames = append(volumeNames, newVolumeName)
-					// return out, err
-					volumes = append(volumes, *volume)
-				}
+			if err = mtt.MutateWithRuntimeInfo(pvcName, runtimeInfo, containerNameSuffix); err != nil {
+				s.log.Error(err, "failed to mutate pod for the pvc", "pod name", podName, "pvc name", pvcName)
+				return out, err
 			}
 
-			log.V(1).Info("After append volume", "original", volumes)
+			idx++
 		}
-		err = pod.SetVolumes(volumes)
-		if err != nil {
+
+		if err = mtt.PostMutate(); err != nil {
+			s.log.Error(err, "failed to execute PostMutate() for the pod", "pod name", podName)
 			return out, err
 		}
 
-		// 5.Add sidecar as the first container
-		containers, err := pod.GetContainers()
-		if err != nil {
-			return out, err
-		}
-
-		// Skip injection for injected container
-		for _, c := range containers {
-			if c.Name == common.FuseContainerName {
-				warningStr := fmt.Sprintf("===> Skipping injection because %v has injected %q sidecar already\n",
-					namespacedName, common.FuseContainerName)
-				if len(kind) != 0 {
-					warningStr = fmt.Sprintf("===> Skipping injection because Kind %s: %v has injected %q sidecar already\n",
-						kind, namespacedName, common.FuseContainerName)
-				}
-				log.Info(warningStr)
-				injectFuseContainer = false
-				break
-			}
-		}
-		fuseContainer := template.FuseContainer
-		for oldName, newName := range volumeNamesConflict {
-			for i, volumeMount := range fuseContainer.VolumeMounts {
-				if volumeMount.Name == oldName {
-					fuseContainer.VolumeMounts[i].Name = newName
-				}
-			}
-		}
-		if injectFuseContainer {
-			containers = append([]corev1.Container{fuseContainer}, containers...)
-		}
-
-		// 6. Set mountPropagationHostToContainer to the dataset volume mount point
-		mountPropagationHostToContainer := corev1.MountPropagationHostToContainer
-		for _, container := range containers {
-			if container.Name != common.FuseContainerName {
-				for i, volumeMount := range container.VolumeMounts {
-					if utils.ContainsString(datasetVolumeNames, volumeMount.Name) {
-						container.VolumeMounts[i].MountPropagation = &mountPropagationHostToContainer
-					}
-				}
-			}
-		}
-
-		err = pod.SetContainers(containers)
-		if err != nil {
-			return out, err
-		}
-
-		// 7. Set the injection phase done to avoid re-injection
-		metaObj.Labels[common.InjectSidecarDone] = common.True
-		err = pod.SetMetaObject(metaObj)
-		if err != nil {
+		if err = mutator.ApplyFluidObjectSpecs(pod, mtt.GetMutatedPodSpecs()); err != nil {
+			s.log.Error(err, "error when applying mutated specs to pod", "pod name", podName)
 			return out, err
 		}
 	}
-
-	// kubeclient.IsVolumeMountForPVC(pvcName, )
 
 	err = application.SetPodSpecs(pods)
 	if err != nil {
@@ -317,26 +229,34 @@ func (s *Injector) inject(in runtime.Object, pvcName string, runtimeInfo base.Ru
 	}
 
 	out = application.GetObject()
-	if err != nil {
-		return out, err
-	}
 	return out, nil
 }
 
+// Inject delegates inject() to do all the mutations
 func (s *Injector) Inject(in runtime.Object, runtimeInfos map[string]base.RuntimeInfoInterface) (out runtime.Object, err error) {
-	for pvcName, runtimeInfo := range runtimeInfos {
-		out, err = s.inject(in, pvcName, runtimeInfo)
-		if err != nil {
-			return
-		}
-		if len(runtimeInfos) > 1 {
-			in = out.DeepCopyObject()
-		}
-	}
-
-	return
+	return s.inject(in, runtimeInfos)
 }
 
 func (s *Injector) InjectUnstructured(in *unstructuredtype.Unstructured, runtimeInfos map[string]base.RuntimeInfoInterface) (out *unstructuredtype.Unstructured, err error) {
 	return nil, fmt.Errorf("not implemented yet")
+}
+
+func (s *Injector) shouldInject(pod common.FluidObject) (should bool, err error) {
+	metaObj, err := pod.GetMetaObject()
+	if err != nil {
+		return should, err
+	}
+
+	// Skip if pod does not enable serverless injection (i.e. lack of specific label)
+	if !utils.ServerlessEnabled(metaObj.Labels) || utils.InjectSidecarDone(metaObj.Labels) {
+		s.log.V(1).Info("Serverless injection not enabled in pod labels, skip")
+		return should, nil
+	}
+
+	should = true
+	return should, nil
+}
+
+func (s *Injector) getServerlessPlatformFromMeta(metaObj metav1.ObjectMeta) string {
+	return utils.GetServerlessPlatform(metaObj.Labels)
 }

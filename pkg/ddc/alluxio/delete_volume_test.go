@@ -29,7 +29,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type TestCase struct {
@@ -40,7 +39,7 @@ type TestCase struct {
 
 func newTestAlluxioEngine(client client.Client, name string, namespace string, withRunTime bool) *AlluxioEngine {
 	runTime := &datav1alpha1.AlluxioRuntime{}
-	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, "alluxio", datav1alpha1.TieredStore{})
+	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, "alluxio")
 	if !withRunTime {
 		runTimeInfo = nil
 		runTime = nil
@@ -51,7 +50,7 @@ func newTestAlluxioEngine(client client.Client, name string, namespace string, w
 		namespace:   namespace,
 		Client:      client,
 		runtimeInfo: runTimeInfo,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 	}
 	return engine
 }

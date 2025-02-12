@@ -1,6 +1,7 @@
 /*
 Copyright 2021 The Fluid Authors.
 
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -19,6 +20,10 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+	JuiceFSRuntimeKind = "JuiceFSRuntime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -50,6 +55,9 @@ type JuiceFSRuntimeSpec struct {
 	// Tiered storage used by JuiceFS
 	TieredStore TieredStore `json:"tieredstore,omitempty"`
 
+	// Configs of JuiceFS
+	Configs *[]string `json:"configs,omitempty"`
+
 	// The replicas of the worker, need to be specified
 	Replicas int32 `json:"replicas,omitempty"`
 
@@ -60,6 +68,18 @@ type JuiceFSRuntimeSpec struct {
 	// Prometheus is enabled by default
 	// +optional
 	DisablePrometheus bool `json:"disablePrometheus,omitempty"`
+
+	// Volumes is the list of Kubernetes volumes that can be mounted by the alluxio runtime components and/or fuses.
+	// +optional
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
+
+	// PodMetadata defines labels and annotations that will be propagated to JuiceFs's pods.
+	// +optional
+	PodMetadata PodMetadata `json:"podMetadata,omitempty"`
+
+	// CleanCachePolicy defines cleanCache Policy
+	// +optional
+	CleanCachePolicy CleanCachePolicy `json:"cleanCachePolicy,omitempty"`
 }
 
 // JuiceFSCompTemplateSpec is a description of the JuiceFS components
@@ -79,6 +99,9 @@ type JuiceFSCompTemplateSpec struct {
 	// +optional
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
+	// Options
+	Options map[string]string `json:"options,omitempty"`
+
 	// Environment variables that will be used by JuiceFS component.
 	Env []corev1.EnvVar `json:"env,omitempty"`
 
@@ -89,6 +112,19 @@ type JuiceFSCompTemplateSpec struct {
 	// NodeSelector is a selector
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// VolumeMounts specifies the volumes listed in ".spec.volumes" to mount into runtime component's filesystem.
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+
+	// PodMetadata defines labels and annotations that will be propagated to JuiceFs's pods.
+	// +optional
+	PodMetadata PodMetadata `json:"podMetadata,omitempty"`
+
+	// Whether to use hostnetwork or not
+	// +kubebuilder:validation:Enum=HostNetwork;"";ContainerNetwork
+	// +optional
+	NetworkMode NetworkMode `json:"networkMode,omitempty"`
 }
 
 type JuiceFSFuseSpec struct {
@@ -107,15 +143,18 @@ type JuiceFSFuseSpec struct {
 	// Resources that will be requested by JuiceFS Fuse.
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
-	// If the fuse client should be deployed in global mode,
-	// otherwise the affinity should be considered
+	// Options mount options that fuse pod will use
 	// +optional
-	Global bool `json:"global,omitempty"`
+	Options map[string]string `json:"options,omitempty"`
 
 	// NodeSelector is a selector which must be true for the fuse client to fit on a node,
 	// this option only effect when global is enabled
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// VolumeMounts specifies the volumes listed in ".spec.volumes" to mount into runtime component's filesystem.
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
 
 	// CleanPolicy decides when to clean Juicefs Fuse pods.
 	// Currently Fluid supports two policies: OnDemand and OnRuntimeDeleted
@@ -124,6 +163,15 @@ type JuiceFSFuseSpec struct {
 	// Defaults to OnDemand
 	// +optional
 	CleanPolicy FuseCleanPolicy `json:"cleanPolicy,omitempty"`
+
+	// PodMetadata defines labels and annotations that will be propagated to JuiceFs's pods.
+	// +optional
+	PodMetadata PodMetadata `json:"podMetadata,omitempty"`
+
+	// Whether to use hostnetwork or not
+	// +kubebuilder:validation:Enum=HostNetwork;"";ContainerNetwork
+	// +optional
+	NetworkMode NetworkMode `json:"networkMode,omitempty"`
 }
 
 //+kubebuilder:object:root=true

@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Author.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,9 +17,11 @@ limitations under the License.
 package dataload
 
 const (
-	DATALOAD_FINALIZER     = "fluid-dataload-controller-finalizer"
-	DATALOAD_CHART         = "fluid-dataloader"
-	DATALOAD_DEFAULT_IMAGE = "registry.cn-hangzhou.aliyuncs.com/fluid/fluid-dataloader"
-	DATALOAD_SUFFIX_LENGTH = 5
-	ENV_DATALOADER_IMG     = "DATALOADER_IMG"
+	DataLoadLockName = "DataLoad"
+
+	DataloadFinalizer    = "fluid-dataload-controller-finalizer"
+	DataloadChart        = "fluid-dataloader"
+	DataloadDefaultImage = "registry.cn-hangzhou.aliyuncs.com/fluid/fluid-dataloader"
+	DataloadSuffixLength = 5
+	EnvDataloaderImg     = "DATALOADER_IMG"
 )

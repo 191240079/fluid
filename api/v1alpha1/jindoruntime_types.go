@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Author.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -58,10 +59,26 @@ type JindoCompTemplateSpec struct {
 	// +optional
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 
-	// Labels will be added on all the JindoFS Master or Worker pods.
-	// Any label already existed will be overriden
+	// Labels will be added on JindoFS Master or Worker pods.
+	// DEPRECATED: This is a deprecated field. Please use PodMetadata instead.
+	// Note: this field is set to be exclusive with PodMetadata.Labels
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
+
+	// PodMetadata defines labels and annotations that will be propagated to Jindo's pods
+	// +optional
+	PodMetadata PodMetadata `json:"podMetadata,omitempty"`
+
+	// If disable JindoFS master or worker
+	// +optional
+	Disabled bool `json:"disabled,omitempty"`
+
+	// VolumeMounts specifies the volumes listed in ".spec.volumes" to mount into the jindo runtime component's filesystem.
+	// +optional
+	VolumeMounts []corev1.VolumeMount `json:"volumeMounts,omitempty"`
+
+	// ImagePullSecrets that will be used to pull images
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // JindoFuseSpec is a description of the Jindo Fuse
@@ -75,6 +92,9 @@ type JindoFuseSpec struct {
 
 	// One of the three policies: `Always`, `IfNotPresent`, `Never`
 	ImagePullPolicy string `json:"imagePullPolicy,omitempty"`
+
+	// ImagePullSecrets that will be used to pull images
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// Configurable properties for Jindo System. <br>
 	Properties map[string]string `json:"properties,omitempty"`
@@ -94,11 +114,6 @@ type JindoFuseSpec struct {
 	// Arguments that will be passed to Jindo Fuse
 	Args []string `json:"args,omitempty"`
 
-	// If the fuse client should be deployed in global mode,
-	// otherwise the affinity should be considered
-	// +optional
-	Global bool `json:"global,omitempty"`
-
 	// NodeSelector is a selector which must be true for the fuse client to fit on a node,
 	// this option only effect when global is enabled
 	// +optional
@@ -108,10 +123,15 @@ type JindoFuseSpec struct {
 	// +optional
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 
-	// Labels will be added on all the JindoFS Fuse pods.
-	// Any label already existed will be overriden
+	// Labels will be added on all the JindoFS pods.
+	// DEPRECATED: this is a deprecated field. Please use PodMetadata.Labels instead.
+	// Note: this field is set to be exclusive with PodMetadata.Labels
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
+
+	// PodMetadata defines labels and annotations that will be propagated to Jindo's fuse pods
+	// +optional
+	PodMetadata PodMetadata `json:"podMetadata,omitempty"`
 
 	// CleanPolicy decides when to clean JindoFS Fuse pods.
 	// Currently Fluid supports two policies: OnDemand and OnRuntimeDeleted
@@ -120,6 +140,17 @@ type JindoFuseSpec struct {
 	// Defaults to OnRuntimeDeleted
 	// +optional
 	CleanPolicy FuseCleanPolicy `json:"cleanPolicy,omitempty"`
+
+	// If disable JindoFS fuse
+	// +optional
+	Disabled bool `json:"disabled,omitempty"`
+
+	// +optional
+	LogConfig map[string]string `json:"logConfig,omitempty"`
+
+	// +optional
+	// Define whether fuse metrics will be enabled.
+	Metrics ClientMetrics `json:"metrics,omitempty"`
 }
 
 // JindoRuntimeSpec defines the desired state of JindoRuntime
@@ -160,8 +191,14 @@ type JindoRuntimeSpec struct {
 	Secret string `json:"secret,omitempty"`
 
 	// Labels will be added on all the JindoFS pods.
+	// DEPRECATED: this is a deprecated field. Please use PodMetadata.Labels instead.
+	// Note: this field is set to be exclusive with PodMetadata.Labels
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
+
+	// PodMetadata defines labels and annotations that will be propagated to all Jindo's fuse pods
+	// +optional
+	PodMetadata PodMetadata `json:"podMetadata,omitempty"`
 
 	// +optional
 	LogConfig map[string]string `json:"logConfig,omitempty"`
@@ -170,6 +207,18 @@ type JindoRuntimeSpec struct {
 	// +kubebuilder:validation:Enum=HostNetwork;"";ContainerNetwork
 	// +optional
 	NetworkMode NetworkMode `json:"networkmode,omitempty"`
+
+	// CleanCachePolicy defines cleanCache Policy
+	// +optional
+	CleanCachePolicy CleanCachePolicy `json:"cleanCachePolicy,omitempty"`
+
+	// Volumes is the list of Kubernetes volumes that can be mounted by the jindo runtime components and/or fuses.
+	// +optional
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
+
+	// ImagePullSecrets that will be used to pull images
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // +kubebuilder:object:root=true

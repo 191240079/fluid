@@ -19,17 +19,21 @@ package alluxio
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/brahma-adshonor/gohook"
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/alluxio/operations"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 )
 
 func TestSyncMetadata(t *testing.T) {
@@ -80,10 +84,82 @@ func TestSyncMetadata(t *testing.T) {
 		},
 	}
 
+	runtimeInputs := []datav1alpha1.AlluxioRuntime{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "hbase",
+				Namespace: "fluid",
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "spark",
+				Namespace: "fluid",
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "hadoop",
+				Namespace: "fluid",
+			},
+		},
+	}
+
 	testObjs := []runtime.Object{}
 	for _, datasetInput := range datasetInputs {
 		testObjs = append(testObjs, datasetInput.DeepCopy())
 	}
+
+	for _, runtimeInput := range runtimeInputs {
+		testObjs = append(testObjs, runtimeInput.DeepCopy())
+	}
+
+	var statefulsetInputs = []appsv1.StatefulSet{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "hbase-master",
+				Namespace: "fluid",
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Replicas: ptr.To[int32](2),
+			},
+			Status: appsv1.StatefulSetStatus{
+				Replicas:      3,
+				ReadyReplicas: 2,
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "spark-master",
+				Namespace: "fluid",
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Replicas: ptr.To[int32](2),
+			},
+			Status: appsv1.StatefulSetStatus{
+				Replicas:      3,
+				ReadyReplicas: 3,
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "hadoop-master",
+				Namespace: "fluid",
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Replicas: ptr.To[int32](2),
+			},
+			Status: appsv1.StatefulSetStatus{
+				Replicas:      3,
+				ReadyReplicas: 3,
+			},
+		},
+	}
+
+	for _, statefulset := range statefulsetInputs {
+		testObjs = append(testObjs, statefulset.DeepCopy())
+	}
+
 	client := fake.NewFakeClientWithScheme(testScheme, testObjs...)
 
 	engines := []AlluxioEngine{
@@ -91,20 +167,20 @@ func TestSyncMetadata(t *testing.T) {
 			name:      "hbase",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 		{
 			name:      "spark",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 	}
 
 	for _, engine := range engines {
 		err := engine.SyncMetadata()
 		if err != nil {
-			t.Errorf("fail to exec the function")
+			t.Errorf("fail to exec the function due to: %v", err)
 		}
 	}
 
@@ -112,7 +188,7 @@ func TestSyncMetadata(t *testing.T) {
 		name:      "hadoop",
 		namespace: "fluid",
 		Client:    client,
-		Log:       log.NullLogger{},
+		Log:       fake.NullLogger(),
 	}
 
 	err := gohook.Hook(operations.AlluxioFileUtils.QueryMetaDataInfoIntoFile, QueryMetaDataInfoIntoFileCommon, nil)
@@ -126,11 +202,158 @@ func TestSyncMetadata(t *testing.T) {
 	wrappedUnhookQueryMetaDataInfoIntoFile()
 }
 
+func TestSyncMetadataWithoutMaster(t *testing.T) {
+	var statefulsetInputs = []appsv1.StatefulSet{}
+
+	testObjs := []runtime.Object{}
+	for _, statefulset := range statefulsetInputs {
+		testObjs = append(testObjs, statefulset.DeepCopy())
+	}
+
+	var daemonSetInputs = []appsv1.DaemonSet{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "hbase-fuse",
+				Namespace: "fluid",
+			},
+			Status: appsv1.DaemonSetStatus{
+				NumberUnavailable: 1,
+				NumberReady:       1,
+				NumberAvailable:   1,
+			},
+		},
+	}
+
+	for _, daemonSet := range daemonSetInputs {
+		testObjs = append(testObjs, daemonSet.DeepCopy())
+	}
+
+	var alluxioruntimeInputs = []datav1alpha1.AlluxioRuntime{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "hbase",
+				Namespace: "fluid",
+			},
+			Status: datav1alpha1.RuntimeStatus{
+				MasterPhase: datav1alpha1.RuntimePhaseReady,
+				WorkerPhase: datav1alpha1.RuntimePhaseReady,
+				FusePhase:   datav1alpha1.RuntimePhaseReady,
+			},
+		},
+	}
+	for _, alluxioruntimeInput := range alluxioruntimeInputs {
+		testObjs = append(testObjs, alluxioruntimeInput.DeepCopy())
+	}
+
+	var datasetInputs = []*datav1alpha1.Dataset{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "hbase",
+				Namespace: "fluid",
+			},
+			Spec: datav1alpha1.DatasetSpec{},
+			Status: datav1alpha1.DatasetStatus{
+				Phase: datav1alpha1.BoundDatasetPhase,
+				HCFSStatus: &datav1alpha1.HCFSStatus{
+					Endpoint:                    "test Endpoint",
+					UnderlayerFileSystemVersion: "Underlayer HCFS Compatible Version",
+				},
+			},
+		},
+	}
+	for _, dataset := range datasetInputs {
+		testObjs = append(testObjs, dataset.DeepCopy())
+	}
+
+	client := fake.NewFakeClientWithScheme(testScheme, testObjs...)
+
+	engines := []AlluxioEngine{
+		{
+			Client:    client,
+			Log:       fake.NullLogger(),
+			namespace: "fluid",
+			name:      "hbase",
+			runtime: &datav1alpha1.AlluxioRuntime{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "hbase",
+					Namespace: "fluid",
+				},
+			},
+		},
+	}
+
+	var testCase = []struct {
+		engine                     AlluxioEngine
+		expectedErrorNil           bool
+		expectedRuntimeMasterPhase datav1alpha1.RuntimePhase
+		expectedRuntimeWorkerPhase datav1alpha1.RuntimePhase
+		expectedRuntimeFusePhase   datav1alpha1.RuntimePhase
+		expectedDatasetPhase       datav1alpha1.DatasetPhase
+	}{
+		{
+			engine:                     engines[0],
+			expectedErrorNil:           false,
+			expectedRuntimeMasterPhase: datav1alpha1.RuntimePhaseNotReady,
+			expectedRuntimeWorkerPhase: datav1alpha1.RuntimePhaseNotReady,
+			expectedRuntimeFusePhase:   datav1alpha1.RuntimePhaseNotReady,
+			expectedDatasetPhase:       datav1alpha1.FailedDatasetPhase,
+		},
+	}
+
+	for _, test := range testCase {
+		klog.Info("test")
+		err := test.engine.SyncMetadata()
+		if err != nil && test.expectedErrorNil == true ||
+			err == nil && test.expectedErrorNil == false {
+			t.Errorf("fail to exec the SyncMetadata function with err %v", err)
+			return
+		}
+
+		alluxioruntime, err := test.engine.getRuntime()
+		if err != nil {
+			t.Errorf("fail to get the runtime with the error %v", err)
+			return
+		}
+
+		if alluxioruntime.Status.MasterPhase != test.expectedRuntimeMasterPhase {
+			t.Errorf("fail to update the runtime master status, get %s, expect %s", alluxioruntime.Status.MasterPhase, test.expectedRuntimeMasterPhase)
+			return
+		}
+
+		if alluxioruntime.Status.WorkerPhase != test.expectedRuntimeWorkerPhase {
+			t.Errorf("fail to update the runtime worker status, get %s, expect %s", alluxioruntime.Status.WorkerPhase, test.expectedRuntimeWorkerPhase)
+			return
+		}
+
+		if alluxioruntime.Status.FusePhase != test.expectedRuntimeFusePhase {
+			t.Errorf("fail to update the runtime fuse status, get %s, expect %s", alluxioruntime.Status.FusePhase, test.expectedRuntimeFusePhase)
+			return
+		}
+
+		var dataset datav1alpha1.Dataset
+		key := types.NamespacedName{
+			Name:      alluxioruntime.Name,
+			Namespace: alluxioruntime.Namespace,
+		}
+		err = client.Get(context.TODO(), key, &dataset)
+
+		if err != nil {
+			t.Errorf("fail to get the dataset with error %v", err)
+			return
+		}
+		if !reflect.DeepEqual(dataset.Status.Phase, test.expectedDatasetPhase) {
+			t.Errorf("fail to update the dataset status, get %s, expect %s", dataset.Status.Phase, test.expectedDatasetPhase)
+			return
+		}
+
+	}
+}
+
 func TestShouldSyncMetadata(t *testing.T) {
 	datasetInputs := []datav1alpha1.Dataset{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "hbase",
+				Name:      "test-metadata-sync-done",
 				Namespace: "fluid",
 			},
 			Status: datav1alpha1.DatasetStatus{
@@ -139,7 +362,25 @@ func TestShouldSyncMetadata(t *testing.T) {
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "spark",
+				Name:      "test-metadata-sync-default",
+				Namespace: "fluid",
+			},
+			Status: datav1alpha1.DatasetStatus{
+				UfsTotal: "",
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-metadata-sync-autosync-enabled",
+				Namespace: "fluid",
+			},
+			Status: datav1alpha1.DatasetStatus{
+				UfsTotal: metadataSyncNotDoneMsg,
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-metadata-sync-autosync-disabled",
 				Namespace: "fluid",
 			},
 			Status: datav1alpha1.DatasetStatus{
@@ -147,24 +388,87 @@ func TestShouldSyncMetadata(t *testing.T) {
 			},
 		},
 	}
+	runtimeInputs := []datav1alpha1.AlluxioRuntime{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-metadata-sync-done",
+				Namespace: "fluid",
+			},
+			Spec: datav1alpha1.AlluxioRuntimeSpec{},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-metadata-sync-default",
+				Namespace: "fluid",
+			},
+			Spec: datav1alpha1.AlluxioRuntimeSpec{
+				RuntimeManagement: datav1alpha1.RuntimeManagement{
+					MetadataSyncPolicy: datav1alpha1.MetadataSyncPolicy{
+						AutoSync: nil,
+					},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-metadata-sync-autosync-enabled",
+				Namespace: "fluid",
+			},
+			Spec: datav1alpha1.AlluxioRuntimeSpec{
+				RuntimeManagement: datav1alpha1.RuntimeManagement{
+					MetadataSyncPolicy: datav1alpha1.MetadataSyncPolicy{
+						AutoSync: ptr.To(true),
+					},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-metadata-sync-autosync-disabled",
+				Namespace: "fluid",
+			},
+			Spec: datav1alpha1.AlluxioRuntimeSpec{
+				RuntimeManagement: datav1alpha1.RuntimeManagement{
+					MetadataSyncPolicy: datav1alpha1.MetadataSyncPolicy{
+						AutoSync: ptr.To(false),
+					},
+				},
+			},
+		},
+	}
 	testObjs := []runtime.Object{}
 	for _, datasetInput := range datasetInputs {
 		testObjs = append(testObjs, datasetInput.DeepCopy())
+	}
+	for _, runtimeInput := range runtimeInputs {
+		testObjs = append(testObjs, runtimeInput.DeepCopy())
 	}
 	client := fake.NewFakeClientWithScheme(testScheme, testObjs...)
 
 	engines := []AlluxioEngine{
 		{
-			name:      "hbase",
+			name:      "test-metadata-sync-done",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 		{
-			name:      "spark",
+			name:      "test-metadata-sync-default",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
+		},
+		{
+			name:      "test-metadata-sync-autosync-enabled",
+			namespace: "fluid",
+			Client:    client,
+			Log:       fake.NullLogger(),
+		},
+		{
+			name:      "test-metadata-sync-autosync-disabled",
+			namespace: "fluid",
+			Client:    client,
+			Log:       fake.NullLogger(),
 		},
 	}
 
@@ -180,12 +484,20 @@ func TestShouldSyncMetadata(t *testing.T) {
 			engine:         engines[1],
 			expectedShould: true,
 		},
+		{
+			engine:         engines[2],
+			expectedShould: true,
+		},
+		{
+			engine:         engines[3],
+			expectedShould: false,
+		},
 	}
 
 	for _, test := range testCases {
 		should, err := test.engine.shouldSyncMetadata()
 		if err != nil || should != test.expectedShould {
-			t.Errorf("fail to exec the function")
+			t.Errorf("fail to exec the function due to: %v", err)
 		}
 	}
 }
@@ -223,13 +535,13 @@ func TestShouldRestoreMetadata(t *testing.T) {
 			name:      "hbase",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 		{
 			name:      "spark",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 	}
 
@@ -307,13 +619,13 @@ func TestRestoreMetadataInternal(t *testing.T) {
 			name:      "hbase",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 		{
 			name:      "hbase",
 			namespace: "fluid",
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		},
 	}
 
@@ -386,19 +698,19 @@ func TestSyncMetadataInternal(t *testing.T) {
 			name:               "hbase",
 			namespace:          "fluid",
 			Client:             client,
-			Log:                log.NullLogger{},
-			MetadataSyncDoneCh: make(chan MetadataSyncResult),
+			Log:                fake.NullLogger(),
+			MetadataSyncDoneCh: make(chan base.MetadataSyncResult),
 		},
 		{
 			name:               "spark",
 			namespace:          "fluid",
 			Client:             client,
-			Log:                log.NullLogger{},
+			Log:                fake.NullLogger(),
 			MetadataSyncDoneCh: nil,
 		},
 	}
 
-	result := MetadataSyncResult{
+	result := base.MetadataSyncResult{
 		StartTime: time.Now(),
 		UfsTotal:  "2GB",
 		Done:      true,

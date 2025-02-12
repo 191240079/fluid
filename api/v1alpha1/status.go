@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -122,8 +123,37 @@ type RuntimeStatus struct {
 	APIGatewayStatus *APIGatewayStatus `json:"apiGateway,omitempty"`
 
 	// MountTime represents time last mount happened
-	// if Mounttime is early than master starting time, remount will be required
-	MountTime metav1.Time `json:"mountTime,omitempty"`
+	// if Mounttime is earlier than master starting time, remount will be required
+	MountTime *metav1.Time `json:"mountTime,omitempty"`
+
+	// MountPoints represents the mount points specified in the bounded dataset
+	Mounts []Mount `json:"mounts,omitempty"`
+
+	// CacheAffinity represents the runtime worker pods node affinity including node selector
+	CacheAffinity *corev1.NodeAffinity `json:"cacheAffinity,omitempty"`
+}
+
+// OperationStatus defines the observed state of operation
+type OperationStatus struct {
+	// Phase describes current phase of operation
+	Phase common.Phase `json:"phase"`
+	// Duration tell user how much time was spent to operation
+	Duration string `json:"duration"`
+	// Conditions consists of transition information on operation's Phase
+	Conditions []Condition `json:"conditions"`
+
+	// Infos operation customized name-value
+	Infos map[string]string `json:"infos,omitempty"`
+
+	// LastScheduleTime is the last time the cron operation was scheduled
+	LastScheduleTime *metav1.Time `json:"lastScheduleTime,omitempty"`
+	// LastSuccessfulTime is the last time the cron operation successfully completed
+	LastSuccessfulTime *metav1.Time `json:"lastSuccessfulTime,omitempty"`
+	// WaitingStatus stores information about waiting operation.
+	WaitingFor WaitingStatus `json:"waitingFor,omitempty"`
+
+	// NodeAffinity records the node affinity for operation pods
+	NodeAffinity *corev1.NodeAffinity `json:"nodeAffinity,omitempty"`
 }
 
 type RuntimePhase string

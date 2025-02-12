@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,6 +18,7 @@ package mountpropagationinjector
 
 import (
 	"fmt"
+	"github.com/fluid-cloudnative/fluid/pkg/webhook/plugins/api"
 
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
@@ -26,10 +28,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-const NAME = "MountPropagationInjector"
+const Name = "MountPropagationInjector"
 
 var (
-	log = ctrl.Log.WithName(NAME)
+	log = ctrl.Log.WithName(Name)
 )
 
 type MountPropagationInjector struct {
@@ -37,11 +39,11 @@ type MountPropagationInjector struct {
 	name   string
 }
 
-func NewPlugin(c client.Client) *MountPropagationInjector {
+func NewPlugin(c client.Client, args string) (api.MutatingHandler, error) {
 	return &MountPropagationInjector{
 		client: c,
-		name:   NAME,
-	}
+		name:   Name,
+	}, nil
 }
 
 func (p *MountPropagationInjector) GetName() string {
@@ -53,17 +55,18 @@ func (p *MountPropagationInjector) Mutate(pod *corev1.Pod, runtimeInfos map[stri
 	if len(runtimeInfos) == 0 {
 		return
 	}
-	runtimeNames := make([]string, len(runtimeInfos))
-	for _, runtimeInfo := range runtimeInfos {
+	datasetNames := make([]string, 0, len(runtimeInfos))
+	for name, runtimeInfo := range runtimeInfos {
 		if runtimeInfo == nil {
 			err = fmt.Errorf("RuntimeInfo is nil")
 			shouldStop = true
 			return
 		}
-		runtimeNames = append(runtimeNames, runtimeInfo.GetName())
+		// do not use the runtime name, as the pvc may be the dataset mounting another dataset
+		datasetNames = append(datasetNames, name)
 	}
-	log.V(1).Info("InjectMountPropagation", "runtimeNames", runtimeNames)
-	utils.InjectMountPropagation(runtimeNames, pod)
+	log.V(1).Info("InjectMountPropagation", "datasetNames", datasetNames)
+	utils.InjectMountPropagation(datasetNames, pod)
 
 	return
 }

@@ -19,22 +19,36 @@ package juicefs
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 	options "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/docker"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 )
+
+func (j *JuiceFSEngine) getTieredStoreType(runtime *datav1alpha1.JuiceFSRuntime) int {
+	var mediumType int
+	for _, level := range runtime.Spec.TieredStore.Levels {
+		mediumType = common.GetDefaultTieredStoreOrder(level.MediumType)
+	}
+	return mediumType
+}
+
+func (j *JuiceFSEngine) hasTieredStore(runtime *datav1alpha1.JuiceFSRuntime) bool {
+	return len(runtime.Spec.TieredStore.Levels) > 0
+}
 
 func (j *JuiceFSEngine) getDataSetFileNum() (string, error) {
 	fileCount, err := j.TotalFileNums()
@@ -128,27 +142,25 @@ func (j *JuiceFSEngine) GetRunningPodsOfStatefulSet(stsName string, namespace st
 	return pods, nil
 }
 
-func (j *JuiceFSEngine) getSecret(name string, namespace string) (fuse *corev1.Secret, err error) {
-	fuse = &corev1.Secret{}
-	err = j.Client.Get(context.TODO(), types.NamespacedName{
-		Namespace: namespace,
-		Name:      name,
-	}, fuse)
-
-	return fuse, err
-}
-
-func (j *JuiceFSEngine) parseRuntimeImage(image string, tag string, imagePullPolicy string) (string, string, string) {
+func (j *JuiceFSEngine) parseJuiceFSImage(edition, image string, tag string, imagePullPolicy string) (string, string, string, error) {
+	defaultRuntimeImage := common.DefaultCEImage
+	imageFromEnv := docker.GetImageRepoFromEnv(common.JuiceFSCEImageEnv)
+	imageTagFromEnv := docker.GetImageTagFromEnv(common.JuiceFSCEImageEnv)
+	if edition == EnterpriseEdition {
+		defaultRuntimeImage = common.DefaultEEImage
+		imageFromEnv = docker.GetImageRepoFromEnv(common.JuiceFSEEImageEnv)
+		imageTagFromEnv = docker.GetImageTagFromEnv(common.JuiceFSEEImageEnv)
+	}
 	if len(imagePullPolicy) == 0 {
 		imagePullPolicy = common.DefaultImagePullPolicy
 	}
 
 	if len(image) == 0 {
-		image = docker.GetImageRepoFromEnv(common.JuiceFSFuseImageEnv)
+		image = imageFromEnv
 		if len(image) == 0 {
-			runtimeImageInfo := strings.Split(common.DefaultJuiceFSRuntimeImage, ":")
+			runtimeImageInfo := strings.Split(defaultRuntimeImage, ":")
 			if len(runtimeImageInfo) < 1 {
-				panic("invalid default juicefs runtime image!")
+				return "", "", "", fmt.Errorf("invalid default juicefs runtime image")
 			} else {
 				image = runtimeImageInfo[0]
 			}
@@ -156,50 +168,18 @@ func (j *JuiceFSEngine) parseRuntimeImage(image string, tag string, imagePullPol
 	}
 
 	if len(tag) == 0 {
-		tag = docker.GetImageTagFromEnv(common.JuiceFSFuseImageEnv)
+		tag = imageTagFromEnv
 		if len(tag) == 0 {
-			runtimeImageInfo := strings.Split(common.DefaultJuiceFSRuntimeImage, ":")
+			runtimeImageInfo := strings.Split(defaultRuntimeImage, ":")
 			if len(runtimeImageInfo) < 2 {
-				panic("invalid default juicefs runtime image!")
+				return "", "", "", fmt.Errorf("invalid default juicefs runtime image")
 			} else {
 				tag = runtimeImageInfo[1]
 			}
 		}
 	}
 
-	return image, tag, imagePullPolicy
-}
-
-func (j *JuiceFSEngine) parseFuseImage(image string, tag string, imagePullPolicy string) (string, string, string) {
-	if len(imagePullPolicy) == 0 {
-		imagePullPolicy = common.DefaultImagePullPolicy
-	}
-
-	if len(image) == 0 {
-		image = docker.GetImageRepoFromEnv(common.JuiceFSFuseImageEnv)
-		if len(image) == 0 {
-			fuseImageInfo := strings.Split(common.DefaultJuiceFSFuseImage, ":")
-			if len(fuseImageInfo) < 1 {
-				panic("invalid default juicefs fuse image!")
-			} else {
-				image = fuseImageInfo[0]
-			}
-		}
-	}
-
-	if len(tag) == 0 {
-		tag = docker.GetImageTagFromEnv(common.JuiceFSFuseImageEnv)
-		if len(tag) == 0 {
-			fuseImageInfo := strings.Split(common.DefaultJuiceFSFuseImage, ":")
-			if len(fuseImageInfo) < 2 {
-				panic("invalid default init image!")
-			} else {
-				tag = fuseImageInfo[1]
-			}
-		}
-	}
-
-	return image, tag, imagePullPolicy
+	return image, tag, imagePullPolicy, nil
 }
 
 func (j *JuiceFSEngine) getMountPoint() (mountPath string) {
@@ -212,6 +192,44 @@ func (j *JuiceFSEngine) getHostMountPoint() (mountPath string) {
 	mountRoot := getMountRoot()
 	j.Log.Info("mountRoot", "path", mountRoot)
 	return fmt.Sprintf("%s/%s/%s", mountRoot, j.namespace, j.name)
+}
+
+func (j *JuiceFSEngine) GetValuesConfigMap() (cm *corev1.ConfigMap, err error) {
+	jfsValues := j.getHelmValuesConfigMapName()
+
+	cm = &corev1.ConfigMap{}
+	err = j.Client.Get(context.TODO(), types.NamespacedName{
+		Name:      jfsValues,
+		Namespace: j.namespace,
+	}, cm)
+	if apierrs.IsNotFound(err) {
+		err = nil
+		cm = nil
+	}
+
+	return
+}
+
+func (j *JuiceFSEngine) GetEdition() (edition string) {
+	cm, err := j.GetValuesConfigMap()
+	if err != nil || cm == nil {
+		return ""
+	}
+
+	data := []byte(cm.Data["data"])
+	fuseValues := make(map[string]interface{})
+	err = yaml.Unmarshal(data, &fuseValues)
+	if err != nil {
+		return ""
+	}
+
+	editionStr, ok := fuseValues["edition"]
+	if !ok {
+		return ""
+	}
+
+	edition = editionStr.(string)
+	return
 }
 
 // getMountRoot returns the default path, if it's not set
@@ -236,4 +254,198 @@ func ParseSubPathFromMountPoint(mountPoint string) (string, error) {
 		return "", fmt.Errorf("MountPoint error, can not parse jfs path")
 	}
 	return jPath[1], nil
+}
+
+func GetMetricsPort(options map[string]string) (int, error) {
+	port := int64(9567)
+	if options == nil {
+		return int(port), nil
+	}
+
+	for k, v := range options {
+		if k == "metrics" {
+			re := regexp.MustCompile(`.*:([0-9]{1,6})`)
+			match := re.FindStringSubmatch(v)
+			if len(match) == 0 {
+				return DefaultMetricsPort, fmt.Errorf("invalid metrics port: %s", v)
+			}
+			port, _ = strconv.ParseInt(match[1], 10, 32)
+			break
+		}
+	}
+
+	return int(port), nil
+}
+
+func parseVersion(version string) (*ClientVersion, error) {
+	if version == common.NightlyTag {
+		return &ClientVersion{
+			Tag: common.NightlyTag,
+		}, nil
+	}
+	re := regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)(?:-(.+))?$`)
+	matches := re.FindStringSubmatch(strings.TrimSpace(version))
+	if len(matches) < 4 {
+		return nil, fmt.Errorf("invalid version string: %s", version)
+	}
+	major, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return nil, fmt.Errorf("invalid major version: %s", matches[1])
+	}
+	minor, err := strconv.Atoi(matches[2])
+	if err != nil {
+		return nil, fmt.Errorf("invalid minor version: %s", matches[2])
+	}
+	patch, err := strconv.Atoi(matches[3])
+	if err != nil {
+		return nil, fmt.Errorf("invalid patch version: %s", matches[3])
+	}
+	var tag string
+	if len(matches) > 4 {
+		tag = matches[4]
+	}
+
+	return &ClientVersion{
+		Major: major,
+		Minor: minor,
+		Patch: patch,
+		Tag:   tag,
+	}, nil
+}
+
+type ClientVersion struct {
+	Major, Minor, Patch int
+	Tag                 string
+}
+
+func (v *ClientVersion) LessThan(other *ClientVersion) bool {
+	if v.Tag == common.NightlyTag {
+		return false
+	}
+	if v.Major < other.Major {
+		return true
+	}
+	if v.Major > other.Major {
+		return false
+	}
+	if v.Minor < other.Minor {
+		return true
+	}
+	if v.Minor > other.Minor {
+		return false
+	}
+	if v.Patch < other.Patch {
+		return true
+	}
+	return false
+}
+
+func (j *JuiceFSEngine) getWorkerCommand() (command string, err error) {
+	cm, err := kubeclient.GetConfigmapByName(j.Client, j.getWorkerScriptName(), j.namespace)
+	if err != nil {
+		return "", err
+	}
+	if cm == nil {
+		j.Log.Info("value configMap not found")
+		return "", nil
+	}
+	data := cm.Data
+	script := data["script.sh"]
+	scripts := strings.Split(script, "\n")
+	j.Log.V(1).Info("get worker script", "script", script)
+
+	// mount command is the last one
+	for i := len(scripts) - 1; i >= 0; i-- {
+		if scripts[i] != "" {
+			return scripts[i], nil
+		}
+	}
+	return "", nil
+}
+
+func (j *JuiceFSEngine) getFuseCommand() (command string, err error) {
+	cm, err := kubeclient.GetConfigmapByName(j.Client, j.getFuseScriptName(), j.namespace)
+	if err != nil {
+		return "", err
+	}
+	if cm == nil {
+		j.Log.Info("value configMap not found")
+		return "", nil
+	}
+	data := cm.Data
+	script := data["script.sh"]
+	scripts := strings.Split(script, "\n")
+	j.Log.V(1).Info("get fuse script", "script", script)
+
+	// mount command is the last one
+	for i := len(scripts) - 1; i >= 0; i-- {
+		if scripts[i] != "" {
+			return scripts[i], nil
+		}
+	}
+	return "", nil
+}
+
+func (j JuiceFSEngine) updateWorkerScript(command string) error {
+	cm, err := kubeclient.GetConfigmapByName(j.Client, j.getWorkerScriptName(), j.namespace)
+	if err != nil {
+		return err
+	}
+	if cm == nil {
+		j.Log.Info("value configMap not found")
+		return nil
+	}
+	data := cm.Data
+	script := data["script.sh"]
+
+	newScript := script
+	newScripts := strings.Split(newScript, "\n")
+	// mount command is the last one, replace it
+	for i := len(newScripts) - 1; i >= 0; i-- {
+		if newScripts[i] != "" {
+			newScripts[i] = command
+			break
+		}
+	}
+
+	newValues := make(map[string]string)
+	newValues["script.sh"] = strings.Join(newScripts, "\n")
+	cm.Data = newValues
+	return j.Client.Update(context.Background(), cm)
+}
+
+func (j JuiceFSEngine) updateFuseScript(command string) error {
+	cm, err := kubeclient.GetConfigmapByName(j.Client, j.getFuseScriptName(), j.namespace)
+	if err != nil {
+		return err
+	}
+	if cm == nil {
+		j.Log.Info("value configMap not found")
+		return nil
+	}
+	data := cm.Data
+	script := data["script.sh"]
+
+	newScript := script
+	newScripts := strings.Split(newScript, "\n")
+	// mount command is the last one, replace it
+	for i := len(newScripts) - 1; i >= 0; i-- {
+		if newScripts[i] != "" {
+			newScripts[i] = command
+			break
+		}
+	}
+
+	newValues := make(map[string]string)
+	newValues["script.sh"] = strings.Join(newScripts, "\n")
+	cm.Data = newValues
+	return j.Client.Update(context.Background(), cm)
+}
+
+func (j *JuiceFSEngine) getWorkerScriptName() string {
+	return fmt.Sprintf("%s-worker-script", j.name)
+}
+
+func (j *JuiceFSEngine) getFuseScriptName() string {
+	return fmt.Sprintf("%s-fuse-script", j.name)
 }

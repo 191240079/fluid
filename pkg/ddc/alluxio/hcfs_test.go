@@ -17,6 +17,7 @@ limitations under the License.
 package alluxio
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -32,32 +33,31 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func newAlluxioEngineHCFS(client client.Client, name string, namespace string) *AlluxioEngine {
 	runTime := &v1alpha1.AlluxioRuntime{}
-	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, "alluxio", v1alpha1.TieredStore{})
+	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, "alluxio")
 	engine := &AlluxioEngine{
 		runtime:     runTime,
 		name:        name,
 		namespace:   namespace,
 		Client:      client,
 		runtimeInfo: runTimeInfo,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 	}
 	return engine
 }
 
 func TestGetHCFSStatus(t *testing.T) {
-	mockExecCommon := func(podName string, containerName string, namespace string, cmd []string) (stdout string, stderr string, e error) {
+	mockExecCommon := func(ctx context.Context, podName string, containerName string, namespace string, cmd []string) (stdout string, stderr string, e error) {
 		return "conf", "", nil
 	}
-	mockExecErr := func(podName string, containerName string, namespace string, cmd []string) (stdout string, stderr string, e error) {
+	mockExecErr := func(ctx context.Context, podName string, containerName string, namespace string, cmd []string) (stdout string, stderr string, e error) {
 		return "err", "", errors.New("other error")
 	}
 	wrappedUnhook := func() {
-		err := gohook.UnHook(kubeclient.ExecCommandInContainer)
+		err := gohook.UnHook(kubeclient.ExecCommandInContainerWithFullOutput)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
@@ -93,7 +93,7 @@ func TestGetHCFSStatus(t *testing.T) {
 	fakeClientWithErr := fake.NewFakeClientWithScheme(scheme, runtimeObjs...)
 
 	// test common case
-	err := gohook.Hook(kubeclient.ExecCommandInContainer, mockExecCommon, nil)
+	err := gohook.Hook(kubeclient.ExecCommandInContainerWithFullOutput, mockExecCommon, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -116,7 +116,7 @@ func TestGetHCFSStatus(t *testing.T) {
 	}
 
 	// test when getConf with err
-	err = gohook.Hook(kubeclient.ExecCommandInContainer, mockExecErr, nil)
+	err = gohook.Hook(kubeclient.ExecCommandInContainerWithFullOutput, mockExecErr, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -175,7 +175,7 @@ func TestQueryHCFSEndpoint(t *testing.T) {
 			name:      "not-register",
 			namespace: "fluid",
 			out:       "",
-			isErr:     true,
+			isErr:     false,
 		},
 		{
 			name:      "hbase",
@@ -201,19 +201,19 @@ func TestQueryHCFSEndpoint(t *testing.T) {
 }
 
 func TestCompatibleUFSVersion(t *testing.T) {
-	mockExecCommon := func(podName string, containerName string, namespace string, cmd []string) (stdout string, stderr string, e error) {
+	mockExecCommon := func(ctx context.Context, podName string, containerName string, namespace string, cmd []string) (stdout string, stderr string, e error) {
 		return "conf", "", nil
 	}
-	mockExecErr := func(podName string, containerName string, namespace string, cmd []string) (stdout string, stderr string, e error) {
+	mockExecErr := func(ctx context.Context, podName string, containerName string, namespace string, cmd []string) (stdout string, stderr string, e error) {
 		return "err", "", errors.New("other error")
 	}
 	wrappedUnhook := func() {
-		err := gohook.UnHook(kubeclient.ExecCommandInContainer)
+		err := gohook.UnHook(kubeclient.ExecCommandInContainerWithFullOutput)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
 	}
-	err := gohook.Hook(kubeclient.ExecCommandInContainer, mockExecCommon, nil)
+	err := gohook.Hook(kubeclient.ExecCommandInContainerWithFullOutput, mockExecCommon, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -223,7 +223,7 @@ func TestCompatibleUFSVersion(t *testing.T) {
 		t.Errorf("expected %s, got %s", "conf", out)
 	}
 	wrappedUnhook()
-	err = gohook.Hook(kubeclient.ExecCommandInContainer, mockExecErr, nil)
+	err = gohook.Hook(kubeclient.ExecCommandInContainerWithFullOutput, mockExecErr, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}

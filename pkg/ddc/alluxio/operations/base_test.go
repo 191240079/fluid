@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,6 +17,7 @@ limitations under the License.
 package operations
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -23,11 +25,10 @@ import (
 	"testing"
 
 	"github.com/brahma-adshonor/gohook"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -35,6 +36,7 @@ const (
 	OTHER_ERR      = "other-err"
 	FINE           = "fine"
 	EXEC_ERR       = "exec-err"
+	NEGATIVE_RES   = "negative-res"
 	TOO_MANY_LINES = "too many lines"
 	DATA_NUM       = "data nums not match"
 	PARSE_ERR      = "parse err"
@@ -45,9 +47,9 @@ func TestNewAlluxioFileUtils(t *testing.T) {
 		podName:   "hbase",
 		namespace: "default",
 		container: "hbase-container",
-		log:       logf.NullLogger{},
+		log:       fake.NullLogger(),
 	}
-	result := NewAlluxioFileUtils("hbase", "hbase-container", "default", logf.NullLogger{})
+	result := NewAlluxioFileUtils("hbase", "hbase-container", "default", fake.NullLogger())
 	if !reflect.DeepEqual(expectedResult, result) {
 		t.Errorf("fail to create the AlluxioFileUtils, want: %v, got: %v", expectedResult, result)
 	}
@@ -65,66 +67,35 @@ func TestLoadMetaData(t *testing.T) {
 		o.Development = true
 	}))
 
-	for _, test := range tests {
-		tools := NewAlluxioFileUtils("", "", "", ctrl.Log)
-		err := tools.LoadMetaData(test.path, test.sync)
-		// fmt.Println(expectedErr)
-		if err == nil {
-			t.Errorf("expected %v, got %v", test.path, tools)
-		}
-	}
-}
-
-func TestAlluxioFileUtils_IsExist(t *testing.T) {
-
-	mockExec := func(p1, p2, p3 string, p4 []string) (stdout string, stderr string, e error) {
-
-		if strings.Contains(p4[3], NOT_EXIST) {
-			return "does not exist", "", errors.New("does not exist")
-
-		} else if strings.Contains(p4[3], OTHER_ERR) {
-			return "", "", errors.New("other error")
-		} else {
-			return "", "", nil
-		}
+	mockExec := func(ctx context.Context, p1, p2, p3 string, p4 []string) (stdout string, stderr string, e error) {
+		return "", "", nil
 	}
 
-	err := gohook.Hook(kubeclient.ExecCommandInContainer, mockExec, nil)
+	err := gohook.Hook(kubeclient.ExecCommandInContainerWithFullOutput, mockExec, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	wrappedUnhook := func() {
-		err := gohook.UnHook(kubeclient.ExecCommandInContainer)
+		err := gohook.UnHook(kubeclient.ExecCommandInContainerWithFullOutput)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
 	}
 	defer wrappedUnhook()
 
-	var tests = []struct {
-		in    string
-		out   bool
-		noErr bool
-	}{
-		{NOT_EXIST, false, true},
-		{OTHER_ERR, false, false},
-		{FINE, true, true},
-	}
 	for _, test := range tests {
-		found, err := AlluxioFileUtils{log: logf.NullLogger{}}.IsExist(test.in)
-		if found != test.out {
-			t.Errorf("input parameter is %s,expected %t, got %t", test.in, test.out, found)
-		}
-		var noErr bool = (err == nil)
-		if test.noErr != noErr {
-			t.Errorf("input parameter is %s,expected noerr is %t", test.in, test.noErr)
+		tools := NewAlluxioFileUtils("", "", "", ctrl.Log)
+		err := tools.LoadMetaData(test.path, test.sync)
+		// fmt.Println(expectedErr)
+		if err != nil {
+			t.Errorf("expected %v, got %v", test.path, tools)
 		}
 	}
 }
 
 func TestAlluxioFileUtils_Du(t *testing.T) {
 	out1, out2, out3 := 111, 222, "%233"
-	mockExec := func(p1, p2, p3 string, p4 []string) (stdout string, stderr string, e error) {
+	mockExec := func(ctx context.Context, p1, p2, p3 string, p4 []string) (stdout string, stderr string, e error) {
 
 		if strings.Contains(p4[4], EXEC_ERR) {
 			return "does not exist", "", errors.New("exec-error")
@@ -139,12 +110,12 @@ func TestAlluxioFileUtils_Du(t *testing.T) {
 		}
 	}
 
-	err := gohook.HookByIndirectJmp(kubeclient.ExecCommandInContainer, mockExec, nil)
+	err := gohook.HookByIndirectJmp(kubeclient.ExecCommandInContainerWithFullOutput, mockExec, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	wrappedUnhook := func() {
-		err := gohook.UnHook(kubeclient.ExecCommandInContainer)
+		err := gohook.UnHook(kubeclient.ExecCommandInContainerWithFullOutput)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
@@ -164,7 +135,7 @@ func TestAlluxioFileUtils_Du(t *testing.T) {
 		{FINE, int64(out1), int64(out2), out3, true},
 	}
 	for _, test := range tests {
-		o1, o2, o3, err := AlluxioFileUtils{log: logf.NullLogger{}}.Du(test.in)
+		o1, o2, o3, err := AlluxioFileUtils{log: fake.NullLogger()}.Du(test.in)
 		var noErr bool = (err == nil)
 		if test.noErr != noErr {
 			t.Errorf("input parameter is %s,expected noerr is %t", test.in, test.noErr)
@@ -221,24 +192,24 @@ func TestAlluxioFileUtils_LoadMetadataWithoutTimeout(t *testing.T) {
 		return "", "", errors.New("fail to run the command")
 	}
 	wrappedUnhookExecWithoutTimeout := func() {
-		err := gohook.UnHook(AlluxioFileUtils.execWithoutTimeout)
+		err := gohook.UnHook(AlluxioFileUtils.exec)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
 	}
 
-	err := gohook.Hook(AlluxioFileUtils.execWithoutTimeout, ExecWithoutTimeoutErr, nil)
+	err := gohook.Hook(AlluxioFileUtils.exec, ExecWithoutTimeoutErr, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := AlluxioFileUtils{log: logf.NullLogger{}}
+	a := AlluxioFileUtils{log: fake.NullLogger()}
 	err = a.LoadMetadataWithoutTimeout("/")
 	if err == nil {
 		t.Error("check failure, want err, got nil")
 	}
 	wrappedUnhookExecWithoutTimeout()
 
-	err = gohook.Hook(AlluxioFileUtils.execWithoutTimeout, ExecWithoutTimeoutCommon, nil)
+	err = gohook.Hook(AlluxioFileUtils.exec, ExecWithoutTimeoutCommon, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -267,7 +238,7 @@ func TestAlluxioFileUtils_LoadMetaData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := AlluxioFileUtils{log: logf.NullLogger{}}
+	a := AlluxioFileUtils{log: fake.NullLogger()}
 	err = a.LoadMetaData("/", true)
 	if err == nil {
 		t.Error("check failure, want err, got nil")
@@ -303,7 +274,7 @@ func TestAlluxioFileUtils_QueryMetaDataInfoIntoFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := AlluxioFileUtils{log: logf.NullLogger{}}
+	a := AlluxioFileUtils{log: fake.NullLogger()}
 
 	keySets := []KeyOfMetaDataFile{DatasetName, Namespace, UfsTotal, FileNum, ""}
 	for index, keySet := range keySets {
@@ -451,7 +422,7 @@ func TestAlluxioFileUtils_IsMounted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &AlluxioFileUtils{log: logf.NullLogger{}}
+	a := &AlluxioFileUtils{log: fake.NullLogger()}
 	_, err = a.IsMounted("/hbase")
 	if err == nil {
 		t.Error("check failure, want err, got nil")
@@ -497,7 +468,7 @@ func TestAlluxioFileUtils_FindUnmountedAlluxioPaths(t *testing.T) {
 	ExecCommon := func(a AlluxioFileUtils, command []string, verbose bool) (stdout string, stderr string, err error) {
 		return returnMessage, "", nil
 	}
-	a := &AlluxioFileUtils{log: logf.NullLogger{}}
+	a := &AlluxioFileUtils{log: fake.NullLogger()}
 
 	err := gohook.Hook(AlluxioFileUtils.exec, ExecCommon, nil)
 	if err != nil {
@@ -557,7 +528,7 @@ func TestAlluxioFileUtils_Ready(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &AlluxioFileUtils{log: logf.NullLogger{}}
+	a := &AlluxioFileUtils{log: fake.NullLogger()}
 	ready := a.Ready()
 	if ready != false {
 		t.Errorf("check failure, want false, got %t", ready)
@@ -593,7 +564,7 @@ func TestAlluxioFIleUtils_Du(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &AlluxioFileUtils{log: logf.NullLogger{}}
+	a := &AlluxioFileUtils{log: fake.NullLogger()}
 	_, _, _, err = a.Du("/hbase")
 	if err == nil {
 		t.Error("check failure, want err, got nil")
@@ -622,10 +593,12 @@ func TestAlluxioFIleUtils_Du(t *testing.T) {
 
 func TestAlluxioFileUtils_Count(t *testing.T) {
 	out1, out2, out3 := 111, 222, 333
-	mockExec := func(p1, p2, p3 string, p4 []string) (stdout string, stderr string, e error) {
+	mockExec := func(ctx context.Context, p1, p2, p3 string, p4 []string) (stdout string, stderr string, e error) {
 
 		if strings.Contains(p4[3], EXEC_ERR) {
 			return "does not exist", "", errors.New("exec-error")
+		} else if strings.Contains(p4[3], NEGATIVE_RES) {
+			return "12324\t45463\t-9223372036854775808", "", nil
 		} else if strings.Contains(p4[3], TOO_MANY_LINES) {
 			return "1\n2\n3\n4\n", "1\n2\n3\n4\n", nil
 		} else if strings.Contains(p4[3], DATA_NUM) {
@@ -637,9 +610,9 @@ func TestAlluxioFileUtils_Count(t *testing.T) {
 		}
 	}
 
-	err := gohook.HookByIndirectJmp(kubeclient.ExecCommandInContainer, mockExec, nil)
+	err := gohook.HookByIndirectJmp(kubeclient.ExecCommandInContainerWithFullOutput, mockExec, nil)
 	wrappedUnhook := func() {
-		err := gohook.UnHook(kubeclient.ExecCommandInContainer)
+		err := gohook.UnHook(kubeclient.ExecCommandInContainerWithFullOutput)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
@@ -654,13 +627,14 @@ func TestAlluxioFileUtils_Count(t *testing.T) {
 		noErr            bool
 	}{
 		{EXEC_ERR, 0, 0, 0, false},
+		{NEGATIVE_RES, 0, 0, 0, false},
 		{TOO_MANY_LINES, 0, 0, 0, false},
 		{DATA_NUM, 0, 0, 0, false},
 		{PARSE_ERR, 0, 0, 0, false},
 		{FINE, int64(out1), int64(out2), int64(out3), true},
 	}
 	for _, test := range tests {
-		o1, o2, o3, err := AlluxioFileUtils{log: logf.NullLogger{}}.Count(test.in)
+		o1, o2, o3, err := AlluxioFileUtils{log: fake.NullLogger()}.Count(test.in)
 		var noErr bool = (err == nil)
 		if test.noErr != noErr {
 			t.Errorf("input parameter is %s,expected noerr is %t", test.in, test.noErr)
@@ -681,24 +655,24 @@ func TestAlluxioFileUtils_GetFileCount(t *testing.T) {
 		return "", "", errors.New("fail to run the command")
 	}
 	wrappedUnhookExec := func() {
-		err := gohook.UnHook(AlluxioFileUtils.execWithoutTimeout)
+		err := gohook.UnHook(AlluxioFileUtils.exec)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
 	}
 
-	err := gohook.Hook(AlluxioFileUtils.execWithoutTimeout, ExecWithoutTimeoutErr, nil)
+	err := gohook.Hook(AlluxioFileUtils.exec, ExecWithoutTimeoutErr, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &AlluxioFileUtils{log: logf.NullLogger{}}
+	a := &AlluxioFileUtils{log: fake.NullLogger()}
 	_, err = a.GetFileCount()
 	if err == nil {
 		t.Error("check failure, want err, got nil")
 	}
 	wrappedUnhookExec()
 
-	err = gohook.Hook(AlluxioFileUtils.execWithoutTimeout, ExecWithoutTimeoutCommon, nil)
+	err = gohook.Hook(AlluxioFileUtils.exec, ExecWithoutTimeoutCommon, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -731,7 +705,7 @@ func TestAlluxioFIleUtils_ReportMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &AlluxioFileUtils{log: logf.NullLogger{}}
+	a := &AlluxioFileUtils{log: fake.NullLogger()}
 
 	_, err = a.ReportMetrics()
 	if err == nil {
@@ -769,7 +743,7 @@ func TestAlluxioFIleUtils_ReportCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &AlluxioFileUtils{log: logf.NullLogger{}}
+	a := &AlluxioFileUtils{log: fake.NullLogger()}
 	_, err = a.ReportCapacity()
 	if err == nil {
 		t.Error("check failure, want err, got nil")
@@ -796,24 +770,24 @@ func TestAlluxioFileUtils_exec(t *testing.T) {
 	}
 
 	wrappedUnhookExec := func() {
-		err := gohook.UnHook(AlluxioFileUtils.execWithoutTimeout)
+		err := gohook.UnHook(AlluxioFileUtils.exec)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
 	}
 
-	err := gohook.Hook(AlluxioFileUtils.execWithoutTimeout, ExecWithoutTimeoutErr, nil)
+	err := gohook.Hook(AlluxioFileUtils.exec, ExecWithoutTimeoutErr, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &AlluxioFileUtils{log: logf.NullLogger{}}
+	a := &AlluxioFileUtils{log: fake.NullLogger()}
 	_, _, err = a.exec([]string{"alluxio", "fsadmin", "report", "capacity"}, false)
 	if err == nil {
 		t.Error("check failure, want err, got nil")
 	}
 	wrappedUnhookExec()
 
-	err = gohook.Hook(AlluxioFileUtils.execWithoutTimeout, ExecWithoutTimeoutCommon, nil)
+	err = gohook.Hook(AlluxioFileUtils.exec, ExecWithoutTimeoutCommon, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -822,41 +796,6 @@ func TestAlluxioFileUtils_exec(t *testing.T) {
 		t.Errorf("check failure, want nil, got err: %v", err)
 	}
 	wrappedUnhookExec()
-}
-
-func TestAlluxioFileUtils_execWithoutTimeout(t *testing.T) {
-	mockExecCommon := func(podName string, containerName string, namespace string, cmd []string) (stdout string, stderr string, e error) {
-		return "conf", "", nil
-	}
-	mockExecErr := func(podName string, containerName string, namespace string, cmd []string) (stdout string, stderr string, e error) {
-		return "err", "", errors.New("other error")
-	}
-	wrappedUnhook := func() {
-		err := gohook.UnHook(kubeclient.ExecCommandInContainer)
-		if err != nil {
-			t.Fatal(err.Error())
-		}
-	}
-
-	err := gohook.Hook(kubeclient.ExecCommandInContainer, mockExecErr, nil)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	a := &AlluxioFileUtils{log: logf.NullLogger{}}
-	_, _, err = a.execWithoutTimeout([]string{"alluxio", "fsadmin", "report", "capacity"}, false)
-	if err == nil {
-		t.Error("check failure, want err, got nil")
-	}
-	wrappedUnhook()
-
-	err = gohook.Hook(kubeclient.ExecCommandInContainer, mockExecCommon, nil)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	_, _, err = a.execWithoutTimeout([]string{"alluxio", "fsadmin", "report", "capacity"}, true)
-	if err != nil {
-		t.Errorf("check failure, want nil, got err: %v", err)
-	}
 }
 
 func TestAlluxioFileUtils_MasterPodName(t *testing.T) {
@@ -878,7 +817,7 @@ func TestAlluxioFileUtils_MasterPodName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	a := &AlluxioFileUtils{log: logf.NullLogger{}}
+	a := &AlluxioFileUtils{log: fake.NullLogger()}
 	_, err = a.MasterPodName()
 	if err == nil {
 		t.Error("check failure, want err, got nil")
@@ -895,6 +834,43 @@ func TestAlluxioFileUtils_MasterPodName(t *testing.T) {
 	}
 	if address != "192.168.0.193" {
 		t.Errorf("check failure, want: %s, got: %s", "192.168.0.193", address)
+	}
+	wrappedUnhookExec()
+}
+
+func TestAlluxioFileUtils_ExecMountScripts(t *testing.T) {
+	ExecCommon := func(a AlluxioFileUtils, command []string, verbose bool) (stdout string, stderr string, err error) {
+		return strings.Join(command, " "), "", nil
+	}
+	ExecErr := func(a AlluxioFileUtils, command []string, verbose bool) (stdout string, stderr string, err error) {
+		return "", "", errors.New("fail to run the command")
+	}
+
+	wrappedUnhookExec := func() {
+		err := gohook.UnHook(AlluxioFileUtils.exec)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+	}
+
+	err := gohook.Hook(AlluxioFileUtils.exec, ExecErr, nil)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	a := &AlluxioFileUtils{log: fake.NullLogger()}
+	err = a.ExecMountScripts()
+	if err == nil {
+		t.Error("check failure, want err, got nil")
+	}
+	wrappedUnhookExec()
+
+	err = gohook.Hook(AlluxioFileUtils.exec, ExecCommon, nil)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	err = a.ExecMountScripts()
+	if err != nil {
+		t.Errorf("check failure, want nil, got err: %v", err)
 	}
 	wrappedUnhookExec()
 }

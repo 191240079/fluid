@@ -1,4 +1,5 @@
 /*
+Copyright 2021 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,10 +33,13 @@ import (
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/controllers"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 )
+
+const controllerName string = "GooseFSRuntimeController"
 
 // Use compiler to check if the struct implements all the interface
 var _ controllers.RuntimeReconcilerInterface = (*RuntimeReconciler)(nil)
@@ -73,7 +77,7 @@ func (r *RuntimeReconciler) Reconcile(context context.Context, req ctrl.Request)
 		NamespacedName: req.NamespacedName,
 		Recorder:       r.Recorder,
 		Category:       common.AccelerateCategory,
-		RuntimeType:    runtimeType,
+		RuntimeType:    common.GooseFSRuntime,
 		Client:         r.Client,
 		FinalizerName:  runtimeResourceFinalizerName,
 	}
@@ -92,16 +96,21 @@ func (r *RuntimeReconciler) Reconcile(context context.Context, req ctrl.Request)
 		}
 	}
 	ctx.Runtime = runtime
+	ctx.EngineImpl = ddc.InferEngineImpl(runtime.Status, common.GooseFSEngineImpl)
 	ctx.Log.V(1).Info("process the runtime", "runtime", ctx.Runtime)
 
 	// reconcile the implement
 	return r.ReconcileInternal(ctx)
 }
 
-//SetupWithManager setups the manager with RuntimeReconciler
+// SetupWithManager setups the manager with RuntimeReconciler
 func (r *RuntimeReconciler) SetupWithManager(mgr ctrl.Manager, options controller.Options) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(options).
 		For(&datav1alpha1.GooseFSRuntime{}).
 		Complete(r)
+}
+
+func (r *RuntimeReconciler) ControllerName() string {
+	return controllerName
 }

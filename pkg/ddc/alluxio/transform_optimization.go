@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Author.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,8 +37,8 @@ func (e *AlluxioEngine) optimizeDefaultProperties(runtime *datav1alpha1.AlluxioR
 	}
 
 	setDefaultProperties(runtime, value, "alluxio.fuse.jnifuse.enabled", "true")
+	setDefaultProperties(runtime, value, "alluxio.fuse.jnifuse.libfuse.version", "3")
 	setDefaultProperties(runtime, value, "alluxio.master.metastore", "ROCKS")
-	setDefaultProperties(runtime, value, "alluxio.web.ui.enabled", "false")
 	setDefaultProperties(runtime, value, "alluxio.user.update.file.accesstime.disabled", "true")
 	setDefaultProperties(runtime, value, "alluxio.user.client.cache.enabled", "false")
 	setDefaultProperties(runtime, value, "alluxio.master.metastore.inode.cache.max.size", "10000000")
@@ -47,8 +48,6 @@ func (e *AlluxioEngine) optimizeDefaultProperties(runtime *datav1alpha1.AlluxioR
 	setDefaultProperties(runtime, value, "alluxio.master.metadata.sync.ufs.prefetch.pool.size", "128")
 	setDefaultProperties(runtime, value, "alluxio.user.block.worker.client.pool.min", "512")
 	setDefaultProperties(runtime, value, "alluxio.fuse.debug.enabled", "false")
-	setDefaultProperties(runtime, value, "alluxio.web.ui.enabled", "false")
-	setDefaultProperties(runtime, value, "alluxio.user.file.writetype.default", "MUST_CACHE")
 	setDefaultProperties(runtime, value, "alluxio.user.ufs.block.read.location.policy", "alluxio.client.block.policy.LocalFirstPolicy")
 	setDefaultProperties(runtime, value, "alluxio.user.block.write.location.policy.class", "alluxio.client.block.policy.LocalFirstAvoidEvictionPolicy")
 	setDefaultProperties(runtime, value, "alluxio.worker.allocator.class", "alluxio.worker.block.allocator.MaxFreeAllocator")
@@ -65,7 +64,11 @@ func (e *AlluxioEngine) optimizeDefaultProperties(runtime *datav1alpha1.AlluxioR
 	setDefaultProperties(runtime, value, "alluxio.user.file.passive.cache.enabled", "false")
 	setDefaultProperties(runtime, value, "alluxio.user.block.avoid.eviction.policy.reserved.size.bytes", "2GB")
 	setDefaultProperties(runtime, value, "alluxio.master.journal.folder", "/journal")
-	setDefaultProperties(runtime, value, "alluxio.master.journal.type", "UFS")
+	if value.Master.Replicas > 1 {
+		setDefaultProperties(runtime, value, "alluxio.master.journal.type", "EMBEDDED")
+	} else {
+		setDefaultProperties(runtime, value, "alluxio.master.journal.type", "UFS")
+	}
 	setDefaultProperties(runtime, value, "alluxio.user.block.master.client.pool.gc.threshold", "10min")
 	setDefaultProperties(runtime, value, "alluxio.user.file.master.client.threads", "1024")
 	setDefaultProperties(runtime, value, "alluxio.user.block.master.client.threads", "1024")
@@ -206,7 +209,7 @@ func (e *AlluxioEngine) optimizeDefaultForWorker(runtime *datav1alpha1.AlluxioRu
 	}
 }
 
-func (e *AlluxioEngine) optimizeDefaultFuse(runtime *datav1alpha1.AlluxioRuntime, value *Alluxio) {
+func (e *AlluxioEngine) optimizeDefaultFuse(runtime *datav1alpha1.AlluxioRuntime, value *Alluxio, isNewFuseArgVersion bool) {
 
 	if len(runtime.Spec.Fuse.JvmOptions) > 0 {
 		value.Fuse.JvmOptions = runtime.Spec.Fuse.JvmOptions
@@ -242,12 +245,22 @@ func (e *AlluxioEngine) optimizeDefaultFuse(runtime *datav1alpha1.AlluxioRuntime
 	if len(runtime.Spec.Fuse.Args) > 0 {
 		value.Fuse.Args = runtime.Spec.Fuse.Args
 	} else {
-		if readOnly {
-			value.Fuse.Args = []string{"fuse", "--fuse-opts=kernel_cache,ro,max_read=131072,attr_timeout=7200,entry_timeout=7200,nonempty"}
-		} else {
-			value.Fuse.Args = []string{"fuse", "--fuse-opts=kernel_cache,rw,max_read=131072,attr_timeout=7200,entry_timeout=7200,nonempty"}
+		readOnlyFuseOpts := "--fuse-opts=kernel_cache,ro,attr_timeout=7200,entry_timeout=7200"
+		readWriteFuseOpts := "--fuse-opts=kernel_cache,rw"
+		libfuseVersion, found := runtime.Spec.Properties["alluxio.fuse.jnifuse.libfuse.version"]
+		if found && libfuseVersion == "2" {
+			readOnlyFuseOpts = "--fuse-opts=kernel_cache,ro,max_read=131072,attr_timeout=7200,entry_timeout=7200,nonempty"
+			readWriteFuseOpts = "--fuse-opts=kernel_cache,rw,max_read=131072"
 		}
+		if readOnly {
+			value.Fuse.Args = []string{"fuse", readOnlyFuseOpts}
+		} else {
+			value.Fuse.Args = []string{"fuse", readWriteFuseOpts}
+		}
+	}
 
+	if isNewFuseArgVersion {
+		value.Fuse.Args = append(value.Fuse.Args, value.Fuse.MountPath, "/")
 	}
 
 }

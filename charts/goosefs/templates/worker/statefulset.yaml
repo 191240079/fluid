@@ -1,7 +1,6 @@
 {{- $shortCircuitEnabled := .Values.shortCircuit.enabled }}
 {{- $needDomainSocketVolume := and $shortCircuitEnabled (eq .Values.shortCircuit.policy "uuid") }}
 {{- $hostNetwork := .Values.worker.hostNetwork }}
-{{- $hostPID := .Values.worker.hostPID }}
 
 apiVersion: apps/v1
 kind: StatefulSet
@@ -13,8 +12,9 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
     role: goosefs-worker
-    fluid.io/dataset: {{ .Release.Namespace }}-{{ .Release.Name }}
+    fluid.io/dataset: {{ .Values.ownerDatasetId }}
     fluid.io/dataset-placement: {{ .Values.placement }}
+    {{- include "library.fluid.labels" . | nindent 4 }}
 spec:
   selector:
     matchLabels:
@@ -25,22 +25,24 @@ spec:
   replicas: {{ .Values.worker.replicaCount }}
   template:
     metadata:
-      {{- if .Values.worker.annotations }}
       annotations:
+        sidecar.istio.io/inject: "false"
+      {{- if .Values.worker.annotations }}
 {{ toYaml .Values.worker.annotations | trim | indent 8  }}
       {{- end }}
       labels:
+        sidecar.istio.io/inject: "false"
         app: {{ template "goosefs.name" . }}
         chart: {{ template "goosefs.chart" . }}
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
         role: goosefs-worker
-        fluid.io/dataset: {{ .Release.Namespace }}-{{ .Release.Name }}
+        fluid.io/dataset: {{ .Values.ownerDatasetId }}
         fluid.io/dataset-placement: {{ .Values.placement }}
+        {{- include "library.fluid.labels" . | nindent 8 }}
     spec:
       enableServiceLinks: false
       hostNetwork: {{ $hostNetwork }}
-      hostPID: {{ .Values.worker.hostPID }}
       dnsPolicy: {{ .Values.worker.dnsPolicy | default ($hostNetwork | ternary "ClusterFirstWithHostNet" "ClusterFirst") }}
       securityContext:
         fsGroup: {{ .Values.fsGroup }}
@@ -151,6 +153,9 @@ spec:
               {{- range .Values.ufsVolumes }}
             - mountPath: {{ .containerPath }}
               name: {{ .name }}
+              {{- if .subPath }}
+              subPath: {{ .subPath }}
+              {{- end }}
               {{- end }}
             {{- end }}
             {{- if .Values.secrets -}}
@@ -233,6 +238,9 @@ spec:
               {{- range .Values.ufsVolumes }}
             - mountPath: {{ .containerPath }}
               name: {{ .name }}
+              {{- if .subPath }}
+              subPath: {{ .subPath }}
+              {{- end }}
               {{- end }}
             {{- end }}
             {{- if .Values.secrets }}

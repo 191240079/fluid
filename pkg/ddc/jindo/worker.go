@@ -1,3 +1,19 @@
+/*
+Copyright 2023 The Fluid Author.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package jindo
 
 import (
@@ -108,9 +124,9 @@ func (e *JindoEngine) CheckWorkersReady() (ready bool, err error) {
 // getWorkerSelectors gets the selector of the worker
 func (e *JindoEngine) getWorkerSelectors() string {
 	labels := map[string]string{
-		"release":     e.name,
-		POD_ROLE_TYPE: WOKRER_POD_ROLE,
-		"app":         common.JindoRuntime,
+		"release":          e.name,
+		common.PodRoleType: WorkerPodRole,
+		"app":              common.JindoRuntime,
 	}
 	labelSelector := &metav1.LabelSelector{
 		MatchLabels: labels,
@@ -209,7 +225,7 @@ func (e *JindoEngine) buildWorkersAffinity(workers *v1.StatefulSet) (workersToUp
 					Preference: corev1.NodeSelectorTerm{
 						MatchExpressions: []corev1.NodeSelectorRequirement{
 							{
-								Key:      e.getFuseLabelname(),
+								Key:      utils.GetFuseLabelName(e.namespace, e.name, e.runtimeInfo.GetOwnerDatasetUID()),
 								Operator: corev1.NodeSelectorOpIn,
 								Values:   []string{"true"},
 							},

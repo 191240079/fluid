@@ -14,12 +14,7 @@ Created by [gh-md-toc](https://github.com/ekalinin/github-markdown-toc)
 
 #### 1. 部署或配置 Prometheus
 
-如果集群内无 prometheus:
-
-```shell
-$ cd fluid
-$ kubectl apply -f integration/prometheus/prometheus.yaml
-```
+如果你的集群中没有Prometheus，请按照[安装指南](https://prometheus.io/docs/prometheus/latest/installation/)来正确地在你的生产环境中设置Prometheus。
 
 如集群内有 prometheus,可将以下配置写到 prometheus 配置文件中:
 
@@ -61,11 +56,9 @@ $ docker run -d \
   --restart=always \
   --name grafana \
   grafana/grafana
-# In-CLuster 部署
-$ cd fluid
-$ kubectl apply -f integration/prometheus/grafana.yaml 
 ```
 
+如果在Kubernetes中部署，可以参考[文档](https://github.com/grafana/helm-charts/blob/main/charts/grafana/README.md)。
 
 #### 3. 配置 grafana
 
@@ -136,12 +129,12 @@ spec:
         quota: 1Gi
         high: "0.95"
         low: "0.7"
-  # 默认在v0.5.0版本之后，alluxio runtime已经开启了Prometheous数据，如果需要关闭可以主动设置disablePrometheus: true
+  # 默认在v0.5.0版本之后，alluxio runtime已经开启了Prometheus数据，如果需要关闭可以主动设置disablePrometheus: true
   # disablePrometheus: false  
 EOF
 ```
 
-> 注意：默认Prometheous是开启的。如果需要关闭Prometheous，可以设置 disablePrometheus: true, 默认为 false
+> 注意：默认Prometheus是开启的。如果需要关闭Prometheus，可以设置 disablePrometheus: true, 默认为 false
 
 6. 查看监控
 在 grafana HOME 中知道名为Fluid-Prometheus-Grafana-Monitor视图即可，如下所示:

@@ -1,22 +1,36 @@
+/*
+Copyright 2022 The Fluid Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package jindo
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/helm"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubectl"
-	"gopkg.in/yaml.v2"
+	"sigs.k8s.io/yaml"
 )
 
 func (e *JindoEngine) setupMasterInernal() (err error) {
 	var (
 		chartName = utils.GetChartsDirectory() + "/jindofs"
 	)
-	valuefileName, err := e.generateJindoValueFile()
+	valueFileName, err := e.generateJindoValueFile()
 	if err != nil {
 		return
 	}
@@ -29,13 +43,13 @@ func (e *JindoEngine) setupMasterInernal() (err error) {
 		return
 	}
 
-	return helm.InstallRelease(e.name, e.namespace, valuefileName, chartName)
+	return helm.InstallRelease(e.name, e.namespace, valueFileName, chartName)
 }
 
 func (e *JindoEngine) generateJindoValueFile() (valueFileName string, err error) {
 	// why need to delete configmap e.name+"-jindofs-config" ? Or it should be
 	// err = kubeclient.DeleteConfigMap(e.Client, e.name+"-jindofs-config", e.namespace)
-	err = kubeclient.DeleteConfigMap(e.Client, e.getConfigmapName(), e.namespace)
+	err = kubeclient.DeleteConfigMap(e.Client, e.getHelmValuesConfigmapName(), e.namespace)
 	if err != nil {
 		e.Log.Error(err, "Failed to clean value files")
 	}
@@ -47,7 +61,7 @@ func (e *JindoEngine) generateJindoValueFile() (valueFileName string, err error)
 	if err != nil {
 		return
 	}
-	valueFile, err := ioutil.TempFile(os.TempDir(), fmt.Sprintf("%s-%s-values.yaml", e.name, e.runtimeType))
+	valueFile, err := os.CreateTemp(os.TempDir(), fmt.Sprintf("%s-%s-values.yaml", e.name, e.engineImpl))
 	if err != nil {
 		e.Log.Error(err, "failed to create value file", "valueFile", valueFile.Name())
 		return valueFileName, err
@@ -55,18 +69,20 @@ func (e *JindoEngine) generateJindoValueFile() (valueFileName string, err error)
 	valueFileName = valueFile.Name()
 	e.Log.V(1).Info("Save the values file", "valueFile", valueFileName)
 
-	err = ioutil.WriteFile(valueFileName, data, 0400)
+	err = os.WriteFile(valueFileName, data, 0400)
 	if err != nil {
 		return
 	}
 
-	err = kubectl.CreateConfigMapFromFile(e.getConfigmapName(), "data", valueFileName, e.namespace)
+	runtimeInfo := e.runtimeInfo
+	ownerDatasetId := utils.GetDatasetId(runtimeInfo.GetNamespace(), runtimeInfo.GetName(), runtimeInfo.GetOwnerDatasetUID())
+	err = kubeclient.CreateConfigMap(e.Client, e.getHelmValuesConfigmapName(), e.namespace, "data", data, ownerDatasetId)
 	if err != nil {
 		return
 	}
 	return valueFileName, err
 }
 
-func (e *JindoEngine) getConfigmapName() string {
-	return e.name + "-" + e.runtimeType + "-values"
+func (e *JindoEngine) getHelmValuesConfigmapName() string {
+	return e.name + "-" + e.engineImpl + "-values"
 }

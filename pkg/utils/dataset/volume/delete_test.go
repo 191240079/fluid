@@ -1,10 +1,27 @@
+/*
+Copyright 2023 The Fluid Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package volume
 
 import (
 	"context"
 	"testing"
+	"time"
 
-	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	v1 "k8s.io/api/core/v1"
@@ -17,12 +34,12 @@ import (
 )
 
 func TestDeleteFusePersistentVolume(t *testing.T) {
-	runtimeInfoHbase, err := base.BuildRuntimeInfo("hbase", "fluid", "alluxio", datav1alpha1.TieredStore{})
+	runtimeInfoHbase, err := base.BuildRuntimeInfo("hbase", "fluid", "alluxio")
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
 	}
 
-	runtimeInfoHadoop, err := base.BuildRuntimeInfo("hadoop", "fluid", "alluxio", datav1alpha1.TieredStore{})
+	runtimeInfoHadoop, err := base.BuildRuntimeInfo("hadoop", "fluid", "alluxio")
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
 	}
@@ -144,24 +161,41 @@ func TestDeleteFusePersistentVolumeIfExists(t *testing.T) {
 }
 
 func TestDeleteFusePersistentVolumeClaim(t *testing.T) {
-	runtimeInfoHbase, err := base.BuildRuntimeInfo("hbase", "fluid", "alluxio", datav1alpha1.TieredStore{})
+	runtimeInfoHbase, err := base.BuildRuntimeInfo("hbase", "fluid", "alluxio")
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
 	}
 
-	runtimeInfoHadoop, err := base.BuildRuntimeInfo("hadoop", "fluid", "alluxio", datav1alpha1.TieredStore{})
+	runtimeInfoHadoop, err := base.BuildRuntimeInfo("hadoop", "fluid", "alluxio")
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
 	}
 
-	testPVCInputs := []*v1.PersistentVolumeClaim{{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "hbase",
-			Namespace:  "fluid",
-			Finalizers: []string{"kubernetes.io/pvc-protection"},
+	runtimeInfoForceDelete, err := base.BuildRuntimeInfo("force-delete", "fluid", "alluxio")
+	if err != nil {
+		t.Errorf("fail to create the runtimeInfo with error %v", err)
+	}
+
+	testPVCInputs := []*v1.PersistentVolumeClaim{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "hbase",
+				Namespace:   "fluid",
+				Finalizers:  []string{"kubernetes.io/pvc-protection"},
+				Annotations: common.ExpectedFluidAnnotations,
+			},
+			Spec: v1.PersistentVolumeClaimSpec{},
 		},
-		Spec: v1.PersistentVolumeClaimSpec{},
-	}}
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "force-delete",
+				Namespace:         "fluid",
+				Finalizers:        []string{"kubernetes.io/pvc-protection"},
+				Annotations:       common.ExpectedFluidAnnotations,
+				DeletionTimestamp: &metav1.Time{Time: time.Now().Add(-35 * time.Second)},
+			},
+		},
+	}
 
 	testPVCs := []runtime.Object{}
 	for _, pvInput := range testPVCInputs {
@@ -171,23 +205,30 @@ func TestDeleteFusePersistentVolumeClaim(t *testing.T) {
 	client := fake.NewFakeClientWithScheme(testScheme, testPVCs...)
 
 	var testCase = []struct {
-		runtimeInfo    base.RuntimeInfoInterface
-		expectedResult error
+		runtimeInfo base.RuntimeInfoInterface
+		isErr       bool
 	}{
 		{
-			runtimeInfo:    runtimeInfoHadoop,
-			expectedResult: nil,
+			runtimeInfo: runtimeInfoHadoop,
+			isErr:       false,
 		},
 		{
-			runtimeInfo:    runtimeInfoHbase,
-			expectedResult: nil,
+			runtimeInfo: runtimeInfoHbase,
+			isErr:       true,
+		},
+		{
+			runtimeInfo: runtimeInfoForceDelete,
+			isErr:       false,
 		},
 	}
 	for _, test := range testCase {
 		var log = ctrl.Log.WithName("delete")
-		if err := DeleteFusePersistentVolumeClaim(client, test.runtimeInfo, log); err != test.expectedResult {
-			t.Errorf("fail to exec the function with the error %v", err)
+		if err := DeleteFusePersistentVolumeClaim(client, test.runtimeInfo, log); test.isErr != (err != nil) {
+			if test.isErr {
+				t.Errorf("Expected got error, but got nil")
+			} else {
+				t.Errorf("Expected no error, but got error: %v", err)
+			}
 		}
 	}
-
 }

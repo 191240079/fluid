@@ -1,5 +1,5 @@
 <div align="left">
-    <img src="http://kubeflow.oss-cn-beijing.aliyuncs.com/Static/fluid_logo.jpg" title="architecture" height="11%" width="11%" alt="">
+    <img src="static/fluid_logo.jpg" title="architecture" height="11%" width="11%" alt="">
 </div>
 
 
@@ -9,8 +9,9 @@
 [![codecov](https://codecov.io/gh/fluid-cloudnative/fluid/branch/master/graph/badge.svg)](https://codecov.io/gh/fluid-cloudnative/fluid)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fluid-cloudnative/fluid)](https://goreportcard.com/report/github.com/fluid-cloudnative/fluid)
 [![Artifact HUB](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/fluid)](https://artifacthub.io/packages/helm/fluid/fluid)
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Ffluid-cloudnative%2Ffluid.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Ffluid-cloudnative%2Ffluid?ref=badge_shield)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/fluid-cloudnative/fluid/badge)](https://scorecard.dev/viewer/?uri=github.com/fluid-cloudnative/fluid)
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/4886/badge)](https://bestpractices.coreinfrastructure.org/projects/4886)
+[![Leaderboard](https://img.shields.io/badge/Fluid-Check%20Your%20Contribution-orange)](https://opensource.alibaba.com/contribution_leaderboard/details?projectValue=fluid)
 
 |:date:&nbsp;Community Meeting|
 |------------------|
@@ -19,54 +20,59 @@
 ## What is Fluid?
 Fluid is an open source Kubernetes-native Distributed Dataset Orchestrator and Accelerator for data-intensive applications, such as big data and AI applications. It is hosted by the [Cloud Native Computing Foundation](https://cncf.io) (CNCF) as a sandbox project.
 
+For more information, please refer to our papers:
+
+1. **Rong Gu, Kai Zhang, Zhihao Xu, et al. [Fluid: Dataset Abstraction and Elastic Acceleration for Cloud-native Deep Learning Training Jobs](https://ieeexplore.ieee.org/abstract/document/9835158). IEEE ICDE, pp. 2183-2196, May, 2022. (Conference Version)**
+
+2. **Rong Gu, Zhihao Xu, Yang Che, et al. [High-level Data Abstraction and Elastic Data Caching for Data-intensive AI Applications on Cloud-native Platforms](https://ieeexplore.ieee.org/document/10249214). IEEE TPDS, pp. 2946-2964, Vol 34(11), 2023. (Journal Version)**
+
 # Fluid
 English | [简体中文](./README-zh_CN.md)
 
-|![notification](http://kubeflow.oss-cn-beijing.aliyuncs.com/Static/bell-outline-badge.svg) What is NEW!|
-|------------------|
-|Mar. 02th, 2022. Fluid v0.7.0 is **RELEASED**! It provides various new features, such as Fuse sidecar auto injection for all the runtimes (suitable for serverless environment), Fuse auto recovery and upgrade, lazy fuse mount mode, support JuiceFS cache runtime and so on. Please check the [CHANGELOG](CHANGELOG.md) for details.|
-|Aug. 11th, 2021. Fluid v0.6.0 is **RELEASED**! It provides various new features, such as dataset cache autoscaling and cronscaling, dataset cache aware Pod scheduling, HA support for cache Runtime. Please check the [CHANGELOG](CHANGELOG.md) for details.|
-|Apr. 27th, 2021. Fluid accpeted by **CNCF**! Fluid project was [accepted as an official CNCF Sandbox Project](https://lists.cncf.io/g/cncf-toc/message/5822) by CNCF Technical Oversight Committee (TOC) with a majority vote after the review process. New beginning for Fluid! .|
-
+| ![notification](static/bell-outline-badge.svg) What is NEW!  |
+| ------------------------------------------------------------ |
+| **Latest Release**: Apr. 17th, 2024. Fluid v1.0.0. Please check the [CHANGELOG](CHANGELOG.md) for details. |
+|v0.9.0 Release: May. 26th, 2023. Fluid v0.9.0. Please check the [CHANGELOG](CHANGELOG.md) for details. |
+|v0.8.0 Release: Sep. 03th, 2022. Fluid v0.8.0. Please check the [CHANGELOG](CHANGELOG.md) for details. |
+|v0.7.0 Release: Mar. 02th, 2022. Fluid v0.7.0. Please check the [CHANGELOG](CHANGELOG.md) for details. |
+|v0.6.0 Release:  Aug. 11th, 2021. Fluid v0.6.0. Please check the [CHANGELOG](CHANGELOG.md) for details. |
+| Apr. 27th, 2021. Fluid accepted by **CNCF**! Fluid project was [accepted as an official CNCF Sandbox Project](https://lists.cncf.io/g/cncf-toc/message/5822) by CNCF Technical Oversight Committee (TOC) with a majority vote after the review process. New beginning for Fluid! . |
 <div align="center">
-    <img src="http://kubeflow.oss-cn-beijing.aliyuncs.com/Static/architecture.png" title="architecture" height="60%" width="60%" alt="">
+    <img src="static/architecture.png" title="architecture" height="60%" width="60%" alt="">
 </div>
 
 ## Features
 
-- __Native Support for DataSet Abstraction__
+- __Dataset Abstraction__
 
-  	Implement the basic capabilities required for data-intensive applications to achieve efficient data access and reduce the cost of multidimensional management.
+  	Implements the unified abstraction for datasets from multiple storage sources, with observability features to help users evaluate the need for scaling the cache system.
 
-- __Cloud Data Warming up and Accessing Acceleration__
+- __Scalable Cache Runtime__
 
-  	Fluid provides data warm-up and acceleration for cloud applications by using a distributed cache engine (Alluxio) in Kubernetes with  **Observability**, **Portability** and **Horizontal Scalability**
+  	Offers a unified access interface for data operations with different runtimes, enabling access to third-party storage systems.
 
-- __Co-Orchestration for Data and Application__
+- __Automated Data Operations__
 
-  	During application scheduling and data placement on the cloud, taking both the app's characteristics and data location into consideration, to improve the performance.
+  	Provides various automated data operation modes to facilitate integration with automated operations systems.
 
-- __Support Multiple Namespaces Management__
+- __Elasticity and Scheduling__
 
-  	User can create and manage datasets in multiple namespaces.
+  	Enhances data access performance by combining data caching technology with elastic scaling, portability, observability, and data affinity-scheduling capabilities.
 
-- __Support Heterogeneous Data Source Management__
+- __Runtime Platform Agnostic__
 
-  	Unify the Data access for OSS, HDFS, CEPH and Other underlayer storages.
+  	Supports a variety of environments and can run different storage clients based on the environment, including native, edge, Serverless Kubernetes clusters, and Kubernetes multi-cluster environments.
 
 ## Key Concepts
 
-**Dataset**: A DataSet is a set of data logically related that can be used by computing engines, such as Spark for big data analytics and TensorFlow for AI applications. Intelligently leveraging data often creates core industry values. Managing DataSets may require features in different dimensions, such as security, version management and data acceleration. We hope to start with data acceleration to support the management of datasets. 
+**Dataset**: A Dataset is a set of data logically related that can be used by computing engines, such as Spark for big data analytics and TensorFlow for AI applications. Intelligently leveraging data often creates core industry values. Managing Datasets may require features in different dimensions, such as security, version management and data acceleration. We hope to start with data acceleration to support the management of datasets. 
 
-**Runtime**: The execution engine that enforces dataset security, provides version management and data acceleration capabilities. The Runtime defines a set of interfaces to mangage DataSets in their life cycle, so the management and acceleration of datasets can be implemented behind these interfaces.
-
-**AlluxioRuntime**: Based on open-source [Alluxio](https://www.alluxio.io/), 
-Fluid can manage and schedule Alluxio Runtime to achieve dataset visibility, elastic scaling, and data migration. This is one engine which supports data management and caching of Datasets.
+**Runtime**: The Runtime enforces dataset isolation/share, provides version management, and enables data acceleration by defining a set of interfaces to handle DataSets throughout their lifecycle, allowing for the implementation of management and acceleration functionalities behind these interfaces.
 
 ## Prerequisites
 
 - Kubernetes version > 1.16, and support CSI
-- Golang 1.12+
+- Golang 1.18+
 - Helm 3
 
 ## Quick Start
@@ -87,14 +93,14 @@ You can also visit [Fluid Homepage](https://fluid-cloudnative.github.io) to get 
 <details>
 <summary>Demo 1: Accelerate Remote File Accessing with Fluid</summary>
 <pre>
-<a href="http://cloud.video.taobao.com/play/u/2987821887/p/1/e/6/t/1/277753111709.mp4" rel="nofollow"><img src="https://camo.githubusercontent.com/2ee9ef7de9eeb386f365a5d10f5defd12f08457f/687474703a2f2f6b756265666c6f772e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f5374617469632f72656d6f74655f66696c655f616363657373696e672e706e67" alt="" data-canonical-src="http://kubeflow.oss-cn-beijing.aliyuncs.com/Static/remote_file_accessing.png" style="max-width:100%;"></a>
+<a href="http://cloud.video.taobao.com/play/u/2987821887/p/1/e/6/t/1/277753111709.mp4" rel="nofollow"><img src="https://camo.githubusercontent.com/2ee9ef7de9eeb386f365a5d10f5defd12f08457f/687474703a2f2f6b756265666c6f772e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f5374617469632f72656d6f74655f66696c655f616363657373696e672e706e67" alt="" data-canonical-src="static/remote_file_accessing.png" style="max-width:100%;"></a>
 </pre>
 </details>
 
 <details>
 <summary>Demo 2: Machine Learning with Fluid</summary>
 <pre>
-<a href="http://cloud.video.taobao.com/play/u/2987821887/p/1/e/6/t/1/277528130570.mp4" rel="nofollow"><img src="https://camo.githubusercontent.com/5688ab788da9f8cd057e32f3764784ce616ff0fd/687474703a2f2f6b756265666c6f772e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f5374617469632f6d616368696e655f6c6561726e696e672e706e67" alt="" data-canonical-src="http://kubeflow.oss-cn-beijing.aliyuncs.com/Static/machine_learning.png" style="max-width:100%;"></a>
+<a href="http://cloud.video.taobao.com/play/u/2987821887/p/1/e/6/t/1/277528130570.mp4" rel="nofollow"><img src="https://camo.githubusercontent.com/5688ab788da9f8cd057e32f3764784ce616ff0fd/687474703a2f2f6b756265666c6f772e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f5374617469632f6d616368696e655f6c6561726e696e672e706e67" alt="" data-canonical-src="static/machine_learning.png" style="max-width:100%;"></a>
 </pre>
 </details>
 
@@ -127,10 +133,16 @@ See [ROADMAP.md](ROADMAP.md)  for the  roadmap details. It may be updated from t
 
 Feel free to reach out if you have any questions. The maintainers of this project are reachable via:
 
-DingTalk:
+DingTalk Group:
 
 <div>
-  <img src="https://fluid-imgs.oss-cn-shanghai.aliyuncs.com/public/imgs/dingding_code.png" width="280" title="dingtalk">
+  <img src="static/dingtalk.png" width="280" title="dingtalk">
+</div>
+
+WeChat Group:
+
+<div>
+  <img src="static/wechat.png" width="280" title="dingtalk">
 </div>
 
 WeChat Official Account:
@@ -149,13 +161,15 @@ Contributions are highly welcomed and greatly appreciated. See [CONTRIBUTING.md]
 
 ## Adopters
 
-If you are intrested in Fluid and would like to share your experiences with others, you are warmly welcome to add your information on [ADOPTERS.md](ADOPTERS.md) page. We will continuousely discuss new requirements and feature design with you in advance.
+If you are interested in Fluid and would like to share your experiences with others, you are warmly welcome to add your information on [ADOPTERS.md](ADOPTERS.md) page. We will continuously discuss new requirements and feature design with you in advance.
 
 
 ## Open Source License
 
 Fluid is under the Apache 2.0 license. See the [LICENSE](./LICENSE) file for details. It is vendor-neutral.
 
+## Report Vulnerability
+Security is a first priority thing for us at Fluid. If you come across a related issue, please send an email to fluid.opensource.project@gmail.com. Also see our [SECURITY.md](SECURITY.md) file for details.
 
 
 ## Code of Conduct

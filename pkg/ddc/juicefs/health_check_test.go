@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"testing"
 
-	utilpointer "k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
@@ -29,7 +29,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func TestCheckRuntimeHealthy(t *testing.T) {
@@ -51,7 +50,7 @@ func TestCheckRuntimeHealthy(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(1),
+				Replicas: ptr.To[int32](1),
 			},
 			Status: appsv1.StatefulSetStatus{
 				Replicas:        1,
@@ -153,14 +152,14 @@ func TestCheckRuntimeHealthy(t *testing.T) {
 	engines := []JuiceFSEngine{
 		{
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 			namespace: "fluid",
 			name:      "hbase",
 			runtime:   &juicefsruntimeInputs[0],
 		},
 		{
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 			namespace: "fluid",
 			name:      "test",
 			runtime:   &juicefsruntimeInputs[1],
@@ -333,7 +332,7 @@ func TestCheckFuseHealthy(t *testing.T) {
 	engines := []JuiceFSEngine{
 		{
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 			namespace: "fluid",
 			name:      "hbase",
 			runtime: &datav1alpha1.JuiceFSRuntime{
@@ -345,7 +344,7 @@ func TestCheckFuseHealthy(t *testing.T) {
 		},
 		{
 			Client:    client,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 			namespace: "fluid",
 			name:      "spark",
 			runtime: &datav1alpha1.JuiceFSRuntime{

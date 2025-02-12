@@ -1,4 +1,5 @@
 /*
+Copyright 2021 The Fluid Author.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +18,7 @@ package utils
 
 import corev1 "k8s.io/api/core/v1"
 
-//InjectPreferredSchedulingTerms inject the preferredSchedulingTerms into a pod
+// InjectPreferredSchedulingTerms inject the preferredSchedulingTerms into a pod
 func InjectPreferredSchedulingTerms(preferredSchedulingTerms []corev1.PreferredSchedulingTerm, pod *corev1.Pod) {
 	if len(preferredSchedulingTerms) == 0 {
 		return
@@ -40,7 +41,7 @@ func InjectPreferredSchedulingTerms(preferredSchedulingTerms []corev1.PreferredS
 	}
 }
 
-//InjectRequiredSchedulingTerms inject the NodeSelectorTerms into a pod
+// InjectRequiredSchedulingTerms inject the NodeSelectorTerms into a pod
 func InjectNodeSelectorTerms(requiredSchedulingTerms []corev1.NodeSelectorTerm, pod *corev1.Pod) {
 	if len(requiredSchedulingTerms) == 0 {
 		return
@@ -62,17 +63,18 @@ func InjectNodeSelectorTerms(requiredSchedulingTerms []corev1.NodeSelectorTerm, 
 		pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = requiredSchedulingTerms
 	} else {
 		for i := 0; i < len(requiredSchedulingTerms); i++ {
-			pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0].MatchExpressions = append(pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0].MatchExpressions, requiredSchedulingTerms[i].MatchExpressions...)
+			pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0].MatchExpressions =
+				append(pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0].MatchExpressions, requiredSchedulingTerms[i].MatchExpressions...)
 		}
 	}
 
 }
 
-func InjectMountPropagation(runtimeNames []string, pod *corev1.Pod) {
+func InjectMountPropagation(datasetNames []string, pod *corev1.Pod) {
 	propagation := corev1.MountPropagationHostToContainer
 	mountNames := make([]string, 0)
 	for _, mount := range pod.Spec.Volumes {
-		if mount.PersistentVolumeClaim != nil && ContainsString(runtimeNames, mount.PersistentVolumeClaim.ClaimName) {
+		if mount.PersistentVolumeClaim != nil && ContainsString(datasetNames, mount.PersistentVolumeClaim.ClaimName) {
 			mountNames = append(mountNames, mount.Name)
 		}
 	}

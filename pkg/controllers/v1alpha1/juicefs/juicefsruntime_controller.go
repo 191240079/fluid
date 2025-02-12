@@ -1,4 +1,5 @@
 /*
+Copyright 2021 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +21,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fluid-cloudnative/fluid/pkg/ctrl/watch"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc"
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/controllers"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
@@ -36,7 +44,11 @@ import (
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 )
 
-var _ controllers.RuntimeReconcilerInterface = (*JuiceFSRuntimeReconciler)(nil)
+const controllerName string = "JuiceFSRuntimeController"
+
+var (
+	_ controllers.RuntimeReconcilerInterface = (*JuiceFSRuntimeReconciler)(nil)
+)
 
 // JuiceFSRuntimeReconciler reconciles a JuiceFSRuntime object
 type JuiceFSRuntimeReconciler struct {
@@ -44,6 +56,19 @@ type JuiceFSRuntimeReconciler struct {
 	engines map[string]base.Engine
 	mutex   *sync.Mutex
 	*controllers.RuntimeReconciler
+}
+
+func (r *JuiceFSRuntimeReconciler) ControllerName() string {
+	return controllerName
+}
+
+func (r *JuiceFSRuntimeReconciler) ManagedResource() client.Object {
+	return &datav1alpha1.JuiceFSRuntime{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       datav1alpha1.JuiceFSRuntimeKind,
+			APIVersion: datav1alpha1.GroupVersion.Group + "/" + datav1alpha1.GroupVersion.Version,
+		},
+	}
 }
 
 // NewRuntimeReconciler create controller for watching runtime custom resources created
@@ -71,7 +96,7 @@ func (r *JuiceFSRuntimeReconciler) Reconcile(context context.Context, req ctrl.R
 		NamespacedName: req.NamespacedName,
 		Recorder:       r.Recorder,
 		Category:       common.AccelerateCategory,
-		RuntimeType:    runtimeType,
+		RuntimeType:    common.JuiceFSRuntime,
 		Client:         r.Client,
 		FinalizerName:  runtimeResourceFinalizerName,
 	}
@@ -90,6 +115,7 @@ func (r *JuiceFSRuntimeReconciler) Reconcile(context context.Context, req ctrl.R
 		}
 	}
 	ctx.Runtime = runtime
+	ctx.EngineImpl = ddc.InferEngineImpl(runtime.Status, common.JuiceFSEngineImpl)
 	ctx.Log.V(1).Info("process the runtime", "runtime", ctx.Runtime)
 
 	// reconcile the implement
@@ -97,9 +123,26 @@ func (r *JuiceFSRuntimeReconciler) Reconcile(context context.Context, req ctrl.R
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *JuiceFSRuntimeReconciler) SetupWithManager(mgr ctrl.Manager, options controller.Options) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		WithOptions(options).
-		For(&datav1alpha1.JuiceFSRuntime{}).
-		Complete(r)
+func (r *JuiceFSRuntimeReconciler) SetupWithManager(mgr ctrl.Manager, options controller.Options, eventDriven bool) error {
+	if eventDriven {
+		return watch.SetupWatcherForReconciler(mgr, options, r)
+	} else {
+		return ctrl.NewControllerManagedBy(mgr).
+			WithOptions(options).
+			For(&datav1alpha1.JuiceFSRuntime{}).
+			Complete(r)
+	}
+}
+
+func NewCacheOption() cache.Options {
+	return cache.Options{
+		ByObject: map[client.Object]cache.ByObject{
+			&appsv1.StatefulSet{}: {Label: labels.SelectorFromSet(labels.Set{
+				common.App: common.JuiceFSRuntime,
+			})},
+			&appsv1.DaemonSet{}: {Label: labels.SelectorFromSet(labels.Set{
+				common.App: common.JuiceFSRuntime,
+			})},
+		},
+	}
 }

@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,37 +16,19 @@ limitations under the License.
 
 package common
 
-//Reason for Fluid events
+// Fluid events related to datasets/runtimes
 const (
+	ErrorCreateDataset = "ErrorCreateDataset"
+
 	ErrorProcessDatasetReason = "ErrorProcessDataset"
 
 	ErrorDeleteDataset = "ErrorDeleteDataset"
 
+	ErrorValidateSpecFieldsReason = "ErrorValidateSpecFields"
+
 	ErrorProcessRuntimeReason = "ErrorProcessRuntime"
 
 	ErrorHelmInstall = "ErrorHelmInstall"
-
-	TargetDatasetNotFound = "TargetDatasetNotFound"
-
-	TargetDatasetPathNotFound = "TargetDatasetPathNotFound"
-
-	TargetDatasetNotReady = "TargetDatasetNotReady"
-
-	TargetDatasetNamespaceNotSame = "TargetDatasetNamespaceNotSame"
-
-	DataLoadCollision = "DataLoadCollision"
-
-	RuntimeNotReady = "RuntimeNotReady"
-
-	DataLoadJobStarted = "DataLoadJobStarted"
-
-	DataLoadJobFailed = "DataLoadJobFailed"
-
-	DataLoadJobComplete = "DataLoadJobComplete"
-
-	DataBackupFailed = "DataBackupFailed"
-
-	DataBackupComplete = "DataBackupComplete"
 
 	RuntimeScaleInFailed = "RuntimeScaleInFailed"
 
@@ -55,7 +38,74 @@ const (
 
 	FuseRecoverSucceed = "FuseRecoverSucceed"
 
+	FuseUmountDuplicate = "UnmountDuplicateMountpoint"
+
 	RuntimeDeprecated = "RuntimeDeprecated"
+
+	RuntimeWithSecretNotSupported = "RuntimeWithSecretNotSupported"
+)
+
+// Events related to all type of Data Operations
+const (
+	TargetDatasetNotFound = "TargetDatasetNotFound"
+
+	TargetDatasetNotReady = "TargetDatasetNotReady"
+
+	TargetDatasetNamespaceNotSame = "TargetDatasetNamespaceNotSame"
+
+	DataOperationNotSupport = "DataOperationNotSupport"
+
+	DataOperationExecutionFailed = "DataOperationExecutionFailed"
+
+	DataOperationFailed = "DataOperationFailed"
+
+	DataOperationSucceed = "DataOperationSucceed"
+
+	DataOperationNotValid = "DataOperationNotValid"
+
+	DataOperationCollision = "DataOperationCollision"
+
+	TargetSSHSecretNameNotSet = "TargetSSHSecretNameNotSet"
+)
+
+// Events related to dataflow
+const (
+	DataOperationNotFound = "DataOperationNotFound"
+
+	DataOperationWaiting = "DataOperationWaiting"
+)
+
+// Events related to DataLoad
+const (
+	DataLoadCollision = "DataLoadCollision"
+
+	RuntimeNotReady = "RuntimeNotReady"
+
+	DataLoadJobStarted = "DataLoadJobStarted"
+
+	DataLoadJobFailed = "DataLoadJobFailed"
+
+	DataLoadJobComplete = "DataLoadJobComplete"
+)
+
+// Events related to DataMigrate
+const (
+	DataMigrateCollision = "DataMigrateCollision"
+
+	DataMigrateJobStarted = "DataMigrateJobStarted"
+
+	DataMigrateJobFailed = "DataMigrateJobFailed"
+
+	DataMigrateJobComplete = "DataMigrateJobComplete"
+)
+
+// Events related to DataProcess
+const (
+	DataProcessProcessorNotSpecified = "ProcessorNotSpecified"
+
+	DataProcessMultipleProcessorSpecified = "MultipleProcessorSpecified"
+
+	DataProcessConflictMountPath = "ConflictMountPath"
 )
 
 type CacheStoreType string
@@ -84,6 +134,15 @@ var tieredStoreOrderMap = map[MediumType]int{
 	HDD:    2,
 }
 
+type VolumeType string
+
+const (
+	VolumeTypeDefault        VolumeType = ""
+	VolumeTypeHostPath       VolumeType = "hostPath"
+	VolumeTypeEmptyDir       VolumeType = "emptyDir"
+	VolumeTypeVolumeTemplate VolumeType = "volumeTemplate"
+)
+
 // GetDefaultTieredStoreOrder get the TieredStoreOrder from the default Map
 // because the crd has validated the value, It's not possible to meet unknown MediumType
 func GetDefaultTieredStoreOrder(MediumType MediumType) (order int) {
@@ -108,16 +167,52 @@ const (
 )
 
 const (
-	RootDirPath            = "/"
 	DefaultImagePullPolicy = "IfNotPresent"
 	MyPodNamespace         = "MY_POD_NAMESPACE"
 	True                   = "true"
 	False                  = "false"
-	inject                 = ".fluid.io/inject"
-	injectSidecar          = ".sidecar" + inject
-	InjectServerless       = "serverless" + inject
-	InjectFuseSidecar      = "fuse" + injectSidecar
-	InjectCacheDir         = "cachedir" + injectSidecar
-	InjectWorkerSidecar    = "worker" + injectSidecar
-	InjectSidecarDone      = "done" + injectSidecar
+	App                    = "app"
+	JobPolicy              = "fluid.io/jobPolicy"
+	CronPolicy             = "cron"
+	PodRoleType            = "role"
+	DataloadPod            = "dataload-pod"
+	NamespaceFluidSystem   = "fluid-system"
+)
+
+const (
+	inject                        = ".fluid.io/inject"
+	injectSidecar                 = ".sidecar" + inject
+	InjectServerless              = "serverless" + inject             // serverless.fluid.io/inject
+	InjectUnprivilegedFuseSidecar = "unprivileged" + injectSidecar    // unprivileged.sidecar.fluid.io/inject
+	InjectCacheDir                = "cachedir" + injectSidecar        // cachedir.sidecar.fluid.io/inject
+	InjectWorkerSidecar           = "worker" + injectSidecar          // worker.sidecar.fluid.io/inject
+	InjectSidecarDone             = "done" + injectSidecar            // done.sidecar.fluid.io/inject
+	InjectAppPostStart            = "app.poststart" + inject          // app.poststart.fluid.io/inject
+	InjectSidecarPostStart        = "fuse.sidecar.poststart" + inject // fuse.sidecar.poststart.fluid.io/inject
+
+	injectServerful     = ".serverful" + inject
+	InjectServerfulFuse = "fuse" + injectServerful
+
+	InjectFuseSidecar = "fuse" + injectSidecar // [Deprecated] fuse.sidecar.fluid.io/inject
+)
+
+const (
+	EnvServerlessPlatformKey        = "KEY_SERVERLESS_PLATFORM"
+	EnvServerlessPlatformVal        = "VALUE_SERVERLESS_PLATFORM"
+	EnvDisableApplicationController = "KEY_DISABLE_APP_CONTROLLER"
+	EnvImagePullSecretsKey          = "IMAGE_PULL_SECRETS"
+)
+
+const (
+	RuntimeFuseHostPIDKey = "runtime.fluid.io/fuse.hostpid"
+)
+
+const (
+	K8sNodeNameLabelKey = "kubernetes.io/hostname"
+	K8sZoneLabelKey     = "topology.kubernetes.io/zone"
+	K8sRegionLabelKey   = "topology.kubernetes.io/region"
+)
+
+const (
+	SkipPrecheckAnnotationKey = "sidecar.fluid.io/skip-precheck"
 )

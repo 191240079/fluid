@@ -18,6 +18,12 @@ package watch
 
 import (
 	"context"
+	appsv1 "k8s.io/api/apps/v1"
+
+	"github.com/fluid-cloudnative/fluid/pkg/common"
+	webhookReconcile "github.com/fluid-cloudnative/fluid/pkg/controllers/v1alpha1/webhook"
+	"github.com/fluid-cloudnative/fluid/pkg/webhook"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	appsv1 "k8s.io/api/apps/v1"
+	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -48,7 +54,7 @@ type Controller interface {
 	ManagedResource() client.Object
 }
 
-func SetupWatcherWithReconciler(mgr ctrl.Manager, options controller.Options, r Controller) (err error) {
+func SetupWatcherForReconcilerWithDataset(mgr ctrl.Manager, options controller.Options, r Controller, runtimeType string) (err error) {
 	options.Reconciler = r
 	c, err := controller.New(r.ControllerName(), mgr, options)
 	if err != nil {
@@ -56,7 +62,7 @@ func SetupWatcherWithReconciler(mgr ctrl.Manager, options controller.Options, r 
 	}
 
 	runtimeEventHandler := &runtimeEventHandler{}
-	err = c.Watch(&source.Kind{Type: r.ManagedResource()}, &handler.EnqueueRequestForObject{}, predicate.Funcs{
+	err = c.Watch(source.Kind(mgr.GetCache(), r.ManagedResource()), &handler.EnqueueRequestForObject{}, predicate.Funcs{
 		CreateFunc: runtimeEventHandler.onCreateFunc(r),
 		UpdateFunc: runtimeEventHandler.onUpdateFunc(r),
 		DeleteFunc: runtimeEventHandler.onDeleteFunc(r),
@@ -67,27 +73,87 @@ func SetupWatcherWithReconciler(mgr ctrl.Manager, options controller.Options, r 
 	}
 
 	statefulsetEventHandler := &statefulsetEventHandler{}
-	err = c.Watch(&source.Kind{Type: &appsv1.StatefulSet{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    r.ManagedResource(),
-	}, predicate.Funcs{
-		CreateFunc: statefulsetEventHandler.onCreateFunc(r),
-		UpdateFunc: statefulsetEventHandler.onUpdateFunc(r),
-		DeleteFunc: statefulsetEventHandler.onDeleteFunc(r),
-	})
+	err = c.Watch(source.Kind(mgr.GetCache(), &appsv1.StatefulSet{}),
+		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), r.ManagedResource(), handler.OnlyControllerOwner()),
+		predicate.Funcs{
+			CreateFunc: statefulsetEventHandler.onCreateFunc(r),
+			UpdateFunc: statefulsetEventHandler.onUpdateFunc(r),
+			DeleteFunc: statefulsetEventHandler.onDeleteFunc(r),
+		})
 	if err != nil {
 		return err
 	}
 
 	daemonsetEventHandler := &daemonsetEventHandler{}
-	err = c.Watch(&source.Kind{Type: &appsv1.DaemonSet{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    r.ManagedResource(),
-	}, predicate.Funcs{
-		CreateFunc: daemonsetEventHandler.onCreateFunc(r),
-		UpdateFunc: daemonsetEventHandler.onUpdateFunc(r),
-		DeleteFunc: daemonsetEventHandler.onDeleteFunc(r),
+	err = c.Watch(source.Kind(mgr.GetCache(), &appsv1.DaemonSet{}),
+		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), r.ManagedResource(), handler.OnlyControllerOwner()),
+		predicate.Funcs{
+			CreateFunc: daemonsetEventHandler.onCreateFunc(r),
+			UpdateFunc: daemonsetEventHandler.onUpdateFunc(r),
+			DeleteFunc: daemonsetEventHandler.onDeleteFunc(r),
+		})
+	if err != nil {
+		return err
+	}
+
+	// Watch update events on Datasets that have correlated runtime types.
+	if len(runtimeType) > 0 {
+		datasetEventHandler := &datasetEventHandler{}
+		err = c.Watch(source.Kind(mgr.GetCache(), &datav1alpha1.Dataset{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       datav1alpha1.Datasetkind,
+				APIVersion: datav1alpha1.GroupVersion.Group + "/" + datav1alpha1.GroupVersion.Version,
+			},
+		}), &handler.EnqueueRequestForObject{}, predicate.Funcs{
+			UpdateFunc: datasetEventHandler.onUpdateFunc(runtimeType),
+		})
+		if err != nil {
+			log.Error(err, "Failed to watch Dataset")
+			return err
+		}
+	}
+
+	return
+}
+
+func SetupWatcherForReconciler(mgr ctrl.Manager, options controller.Options, r Controller) (err error) {
+	options.Reconciler = r
+	c, err := controller.New(r.ControllerName(), mgr, options)
+	if err != nil {
+		return err
+	}
+
+	runtimeEventHandler := &runtimeEventHandler{}
+	err = c.Watch(source.Kind(mgr.GetCache(), r.ManagedResource()), &handler.EnqueueRequestForObject{}, predicate.Funcs{
+		CreateFunc: runtimeEventHandler.onCreateFunc(r),
+		UpdateFunc: runtimeEventHandler.onUpdateFunc(r),
+		DeleteFunc: runtimeEventHandler.onDeleteFunc(r),
 	})
+	if err != nil {
+		log.Error(err, "Failed to watch JindoRuntime")
+		return err
+	}
+
+	statefulsetEventHandler := &statefulsetEventHandler{}
+	err = c.Watch(source.Kind(mgr.GetCache(), &appsv1.StatefulSet{}),
+		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), r.ManagedResource(), handler.OnlyControllerOwner()),
+		predicate.Funcs{
+			CreateFunc: statefulsetEventHandler.onCreateFunc(r),
+			UpdateFunc: statefulsetEventHandler.onUpdateFunc(r),
+			DeleteFunc: statefulsetEventHandler.onDeleteFunc(r),
+		})
+	if err != nil {
+		return err
+	}
+
+	daemonsetEventHandler := &daemonsetEventHandler{}
+	err = c.Watch(source.Kind(mgr.GetCache(), &appsv1.DaemonSet{}),
+		handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), r.ManagedResource(), handler.OnlyControllerOwner()),
+		predicate.Funcs{
+			CreateFunc: daemonsetEventHandler.onCreateFunc(r),
+			UpdateFunc: daemonsetEventHandler.onUpdateFunc(r),
+			DeleteFunc: daemonsetEventHandler.onDeleteFunc(r),
+		})
 	if err != nil {
 		return err
 	}
@@ -114,4 +180,33 @@ func isOwnerMatched(controllerRef *metav1.OwnerReference, c Controller) bool {
 	apiVersion, kind := target.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
 
 	return kind == controllerRef.Kind && apiVersion == controllerRef.APIVersion
+}
+
+func SetupWatcherForWebhook(mgr ctrl.Manager, certBuilder *webhook.CertificateBuilder, caCert []byte) (err error) {
+	options := controller.Options{}
+	webhookName := common.WebhookName
+	options.Reconciler = &webhookReconcile.WebhookReconciler{
+		CertBuilder: certBuilder,
+		WebhookName: webhookName,
+		CaCert:      caCert,
+	}
+	webhookController, err := controller.New("webhook-controller", mgr, options)
+	if err != nil {
+		return err
+	}
+
+	mutatingWebhookConfigurationEventHandler := &mutatingWebhookConfigurationEventHandler{}
+	err = webhookController.Watch(source.Kind(mgr.GetCache(), &admissionregistrationv1.MutatingWebhookConfiguration{}),
+		&handler.EnqueueRequestForObject{},
+		predicate.Funcs{
+			CreateFunc: mutatingWebhookConfigurationEventHandler.onCreateFunc(webhookName),
+			UpdateFunc: mutatingWebhookConfigurationEventHandler.onUpdateFunc(webhookName),
+			DeleteFunc: mutatingWebhookConfigurationEventHandler.onDeleteFunc(webhookName),
+		})
+	if err != nil {
+		log.Error(err, "Failed to watch mutatingWebhookConfiguration")
+		return err
+	}
+
+	return
 }

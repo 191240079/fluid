@@ -9,6 +9,7 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
     role: goosefs-fuse-client
+    {{- include "library.fluid.labels" . | nindent 4 }}
 spec:
   selector:
     matchLabels:
@@ -25,7 +26,10 @@ spec:
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
         role: goosefs-fuse-client
+        {{- include "library.fluid.labels" . | nindent 8 }}
     spec:
+      tolerations:
+        - operator: Exists
       containers:
         - name: goosefs-fuse-client
           image: alpine:latest

@@ -179,7 +179,7 @@
 0.6.18
 
 - Decouple the fuse client and worker during scheduling
-- Support worker and fuse prefered pod affinity
+- Support worker and fuse preferRed pod affinity
 
 0.6.19
 
@@ -197,3 +197,59 @@
 0.8.0
 
 - Change worker from Daemonset to Statefulset
+
+0.9.0
+
+- Add volumeMounts and volumes
+- Support container network
+
+0.9.1
+
+- Add runtime identity information
+
+0.9.2
+
+- Support emptyDir as tieredStore volume type
+
+0.9.3
+
+- Support configurable pod metadata
+
+0.9.4
+
+- Remove host pid and hostPath volume for backup
+
+0.9.5
+
+- Support emptyDir volume source
+
+0.9.6
+
+- Make fuse tolerate any taint
+
+0.9.7
+
+- Support pass image pull secrets from fluid charts to alluxioruntime controller 
+
+0.9.8
+
+- Fix worker volumes in Alluxio's helm chart
+
+0.9.9
+
+- Support fuse Daemonset use onDelete updateStrategy
+
+0.9.10
+
+- Use `name.namespace` instead of full svc cluster domain
+
+0.9.11
+
+- Support ownerReferences for AlluxioRuntime resources
+
+0.9.12
+
+- Add `sidecar.istio.io/inject` to components annotation
+
+0.9.13
+- Remove `fsGroup` to avoid changing owner group of directory

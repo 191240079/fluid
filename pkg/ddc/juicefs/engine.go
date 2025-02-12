@@ -18,7 +18,12 @@ package juicefs
 
 import (
 	"fmt"
+
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
+
 	"github.com/fluid-cloudnative/fluid/pkg/ctrl"
+	"github.com/fluid-cloudnative/fluid/pkg/utils"
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,11 +39,13 @@ type JuiceFSEngine struct {
 	name        string
 	namespace   string
 	runtimeType string
+	engineImpl  string
 	Log         logr.Logger
 	client.Client
+	Recorder record.EventRecorder
 	//When reaching this gracefulShutdownLimits, the system is forced to clean up.
 	gracefulShutdownLimits int32
-	MetadataSyncDoneCh     chan MetadataSyncResult
+	MetadataSyncDoneCh     chan base.MetadataSyncResult
 	runtimeInfo            base.RuntimeInfoInterface
 	UnitTest               bool
 	retryShutdown          int32
@@ -50,8 +57,10 @@ func Build(id string, ctx cruntime.ReconcileRequestContext) (base.Engine, error)
 		name:                   ctx.Name,
 		namespace:              ctx.Namespace,
 		Client:                 ctx.Client,
+		Recorder:               ctx.Recorder,
 		Log:                    ctx.Log,
 		runtimeType:            ctx.RuntimeType,
+		engineImpl:             ctx.EngineImpl,
 		gracefulShutdownLimits: 5,
 		retryShutdown:          0,
 		MetadataSyncDoneCh:     nil,
@@ -79,4 +88,9 @@ func Build(id string, ctx cruntime.ReconcileRequestContext) (base.Engine, error)
 
 	err = kubeclient.EnsureNamespace(ctx.Client, ctx.Namespace)
 	return template, err
+}
+
+func Precheck(client client.Client, key types.NamespacedName) (found bool, err error) {
+	var obj datav1alpha1.JuiceFSRuntime
+	return utils.CheckObject(client, key, &obj)
 }

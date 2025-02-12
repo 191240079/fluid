@@ -1,4 +1,5 @@
 /*
+Copyright 2021 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,12 +24,12 @@ import (
 // that relates the key and values.
 type NodeSelectorRequirement struct {
 	// The label key that the selector applies to.
-	Key string `yaml:"key,omitempty"`
+	Key string `json:"key,omitempty"`
 	// Represents a key's relationship to a set of values.
 	// Valid operators are In, NotIn, Exists, DoesNotExist. Gt, and Lt.
-	Operator string `yaml:"operator,omitempty"`
+	Operator string `json:"operator,omitempty"`
 	// +optional
-	Values []string `yaml:"values,omitempty"`
+	Values []string `json:"values,omitempty"`
 }
 
 // NodeSelectorTerm represents expressions and fields required to select nodes.
@@ -37,7 +38,7 @@ type NodeSelectorRequirement struct {
 // The TopologySelectorTerm type implements a subset of the NodeSelectorTerm.
 type NodeSelectorTerm struct {
 	// A list of node selector requirements by node's labels.
-	MatchExpressions []NodeSelectorRequirement `yaml:"matchExpressions"`
+	MatchExpressions []NodeSelectorRequirement `json:"matchExpressions"`
 }
 
 // NodeSelector represents the union of the results of one or more label queries
@@ -45,7 +46,7 @@ type NodeSelectorTerm struct {
 // by the node selector terms.
 type NodeSelector struct {
 	//Required. A list of node selector terms.
-	NodeSelectorTerms []NodeSelectorTerm `yaml:"nodeSelectorTerms"`
+	NodeSelectorTerms []NodeSelectorTerm `json:"nodeSelectorTerms"`
 }
 
 type NodeAffinity struct {
@@ -64,7 +65,7 @@ type NodeAffinity struct {
 	// at some point during pod execution (e.g. due to an update), the system
 	// may or may not try to eventually evict the pod from its node.
 	// +optional
-	RequiredDuringSchedulingIgnoredDuringExecution *NodeSelector `yaml:"requiredDuringSchedulingIgnoredDuringExecution"`
+	RequiredDuringSchedulingIgnoredDuringExecution *NodeSelector `json:"requiredDuringSchedulingIgnoredDuringExecution"`
 }
 
 func translateCacheToNodeAffinity(dataAffinity *datav1alpha1.CacheableNodeAffinity) (nodeAffinity *NodeAffinity) {

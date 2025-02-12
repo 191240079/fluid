@@ -1,4 +1,5 @@
 /*
+Copyright 2021 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,9 +23,9 @@ import (
 	"strings"
 
 	fluid "github.com/fluid-cloudnative/fluid/api/v1alpha1"
-	"github.com/go-openapi/spec"
 	"k8s.io/klog/v2"
 	"k8s.io/kube-openapi/pkg/common"
+	spec "k8s.io/kube-openapi/pkg/validation/spec"
 )
 
 // Generate OpenAPI spec definitions for Fluid Resource
@@ -72,6 +73,7 @@ func swaggify(name string) string {
 	name = strings.Replace(name, "k8s.io/kubernetes/pkg/controller/", "", -1)
 	name = strings.Replace(name, "k8s.io/client-go/listers/core/", "", -1)
 	name = strings.Replace(name, "k8s.io/client-go/util/workqueue", "", -1)
+	name = strings.Replace(name, "k8s.io/apimachinery/pkg/api/resource", "", -1)
 	name = strings.Replace(name, "/", ".", -1)
 	return name
 }

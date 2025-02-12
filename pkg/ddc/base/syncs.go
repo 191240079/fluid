@@ -1,4 +1,5 @@
 /*
+Copyright 2022 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/metrics"
 	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,27 +28,19 @@ import (
 
 // SyncReplicas syncs the replicas
 func (t *TemplateEngine) Sync(ctx cruntime.ReconcileRequestContext) (err error) {
-	// Avoid the retires too frequently
-	if !t.permitSync(types.NamespacedName{Name: ctx.Name, Namespace: t.Context.Namespace}) {
-		return
+	// permitSyncEngineStatus avoids frequent rpcs with engines with rate limited retries
+	permitSyncEngineStatus := t.permitSync(types.NamespacedName{Name: ctx.Name, Namespace: t.Context.Namespace})
+	if permitSyncEngineStatus {
+		defer t.setTimeOfLastSync()
 	}
 
 	defer utils.TimeTrack(time.Now(), "base.Sync", "ctx", ctx)
-	defer t.setTimeOfLastSync()
 
-	err = t.Implement.SyncMetadata()
-	if err != nil {
-		return
-	}
-
-	_, err = t.Implement.CheckAndUpdateRuntimeStatus()
-	if err != nil {
-		return
-	}
-
-	err = t.Implement.UpdateCacheOfDataset()
-	if err != nil {
-		return
+	if permitSyncEngineStatus {
+		err = t.Implement.SyncMetadata()
+		if err != nil {
+			return
+		}
 	}
 
 	// 1. Sync replicas
@@ -55,31 +49,52 @@ func (t *TemplateEngine) Sync(ctx cruntime.ReconcileRequestContext) (err error) 
 		return
 	}
 
-	// 2. Check healthy
+	// 2. Sync Runtime Spec
+	var updated bool
+	updated, err = t.Implement.SyncRuntime(ctx)
+	if err != nil {
+		return
+	}
+	if updated {
+		return
+	}
+
+	// 3. Check healthy
 	err = t.Implement.CheckRuntimeHealthy()
 	if err != nil {
+		metrics.GetOrCreateRuntimeMetrics(ctx.Runtime.GetObjectKind().GroupVersionKind().Kind, ctx.Namespace, ctx.Name).HealthCheckErrorInc()
 		return
 	}
 
-	// 3. Update runtime
-	_, err = t.Implement.CheckAndUpdateRuntimeStatus()
+	// 4. Update runtime status
+	if permitSyncEngineStatus {
+		_, err = t.Implement.CheckAndUpdateRuntimeStatus()
+		if err != nil {
+			return
+		}
+	}
+
+	// 5. Update the cached of dataset
+	err = t.Implement.UpdateCacheOfDataset()
 	if err != nil {
 		return
 	}
 
-	// 4. Update dataset mount point
-	ufsToUpdate := t.Implement.ShouldUpdateUFS()
-	if ufsToUpdate != nil {
-		if ufsToUpdate.ShouldUpdate() {
-			var updateReady bool
-			updateReady, err = t.Implement.UpdateOnUFSChange(ufsToUpdate)
-			if err != nil {
-				return
-			}
-			if updateReady {
-				err = utils.UpdateMountStatus(t.Client, t.Context.Name, t.Context.Namespace, datav1alpha1.BoundDatasetPhase)
+	// 6. Update dataset mount point
+	if permitSyncEngineStatus {
+		ufsToUpdate := t.Implement.ShouldUpdateUFS()
+		if ufsToUpdate != nil {
+			if ufsToUpdate.ShouldUpdate() {
+				var updateReady bool
+				updateReady, err = t.Implement.UpdateOnUFSChange(ufsToUpdate)
 				if err != nil {
 					return
+				}
+				if updateReady {
+					err = utils.UpdateMountStatus(t.Client, t.Context.Name, t.Context.Namespace, datav1alpha1.BoundDatasetPhase)
+					if err != nil {
+						return
+					}
 				}
 			}
 		}

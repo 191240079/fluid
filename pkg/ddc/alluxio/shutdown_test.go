@@ -22,8 +22,9 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 
-	. "github.com/agiledragon/gomonkey"
+	. "github.com/agiledragon/gomonkey/v2"
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ctrl"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base/portallocator"
@@ -37,7 +38,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/net"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var (
@@ -70,7 +70,7 @@ func init() {
 
 func TestDestroyWorker(t *testing.T) {
 	// runtimeInfoSpark tests destroy Worker in exclusive mode.
-	runtimeInfoSpark, err := base.BuildRuntimeInfo("spark", "fluid", "alluxio", datav1alpha1.TieredStore{})
+	runtimeInfoSpark, err := base.BuildRuntimeInfo("spark", "fluid", common.AlluxioRuntime)
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
 	}
@@ -79,7 +79,7 @@ func TestDestroyWorker(t *testing.T) {
 	})
 
 	// runtimeInfoSpark tests destroy Worker in shareMode mode.
-	runtimeInfoHadoop, err := base.BuildRuntimeInfo("hadoop", "fluid", "alluxio", datav1alpha1.TieredStore{})
+	runtimeInfoHadoop, err := base.BuildRuntimeInfo("hadoop", "fluid", common.AlluxioRuntime)
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
 	}
@@ -89,7 +89,7 @@ func TestDestroyWorker(t *testing.T) {
 	nodeSelector := map[string]string{
 		"node-select": "true",
 	}
-	runtimeInfoHadoop.SetupFuseDeployMode(true, nodeSelector)
+	runtimeInfoHadoop.SetFuseNodeSelector(nodeSelector)
 
 	var nodeInputs = []*corev1.Node{
 		{
@@ -204,7 +204,7 @@ func TestDestroyWorker(t *testing.T) {
 		},
 	}
 	for _, test := range testCase {
-		engine := &AlluxioEngine{Log: log.NullLogger{}, runtimeInfo: test.runtimeInfo}
+		engine := &AlluxioEngine{Log: fake.NullLogger(), runtimeInfo: test.runtimeInfo}
 		engine.Client = client
 		engine.name = test.runtimeInfo.GetName()
 		engine.namespace = test.runtimeInfo.GetNamespace()
@@ -261,7 +261,7 @@ func TestAlluxioEngineCleanAll(t *testing.T) {
 					},
 					Data: map[string]string{"data": mockConfigMapData},
 				},
-				log: log.NullLogger{},
+				log: fake.NullLogger(),
 			},
 			wantErr: false,
 		},
@@ -333,9 +333,13 @@ func TestAlluxioEngineReleasePorts(t *testing.T) {
 				name:      tt.fields.name,
 				namespace: tt.fields.namespace,
 				Client:    client,
+				Log:       fake.NullLogger(),
 			}
 
-			portallocator.SetupRuntimePortAllocator(client, pr, GetReservedPorts)
+			err := portallocator.SetupRuntimePortAllocator(client, pr, "bitmap", GetReservedPorts)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
 			allocator, _ := portallocator.GetRuntimePortAllocator()
 			patch1 := ApplyMethod(reflect.TypeOf(allocator), "ReleaseReservedPorts",
 				func(_ *portallocator.RuntimePortAllocator, ports []int) {
@@ -365,7 +369,7 @@ func TestAlluxioEngineCleanupCache(t *testing.T) {
 			fields: fields{
 				name:      "spark",
 				namespace: "field",
-				Log:       log.NullLogger{},
+				Log:       fake.NullLogger(),
 			},
 			wantErr: false,
 		},

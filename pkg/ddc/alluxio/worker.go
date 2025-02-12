@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Fluid Authors.
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -104,9 +104,9 @@ func (e *AlluxioEngine) CheckWorkersReady() (ready bool, err error) {
 // getWorkerSelectors gets the selector of the worker
 func (e *AlluxioEngine) getWorkerSelectors() string {
 	labels := map[string]string{
-		"release":     e.name,
-		POD_ROLE_TYPE: WOKRER_POD_ROLE,
-		"app":         common.ALLUXIO_RUNTIME,
+		"release":          e.name,
+		common.PodRoleType: wokrerPodRole,
+		"app":              common.AlluxioRuntime,
 	}
 	labelSelector := &metav1.LabelSelector{
 		MatchLabels: labels,

@@ -17,16 +17,18 @@ limitations under the License.
 package csi
 
 import (
+	"github.com/golang/glog"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+
 	"github.com/fluid-cloudnative/fluid/pkg/csi/config"
 	"github.com/fluid-cloudnative/fluid/pkg/csi/plugins"
 	"github.com/fluid-cloudnative/fluid/pkg/csi/recover"
-	"github.com/golang/glog"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"github.com/fluid-cloudnative/fluid/pkg/csi/updatedbconf"
 )
 
 type registrationFuncs struct {
 	enabled  func() bool
-	register func(mgr manager.Manager, cfg config.Config) error
+	register func(mgr manager.Manager, ctx config.RunningContext) error
 }
 
 var registraions map[string]registrationFuncs
@@ -36,14 +38,15 @@ func init() {
 
 	registraions["plugins"] = registrationFuncs{enabled: plugins.Enabled, register: plugins.Register}
 	registraions["recover"] = registrationFuncs{enabled: recover.Enabled, register: recover.Register}
+	registraions["updatedbconf"] = registrationFuncs{enabled: updatedbconf.Enabled, register: updatedbconf.Register}
 }
 
 // SetupWithManager registers all the enabled components defined in registrations to the controller manager.
-func SetupWithManager(mgr manager.Manager, cfg config.Config) error {
+func SetupWithManager(mgr manager.Manager, ctx config.RunningContext) error {
 	for rName, r := range registraions {
 		if r.enabled() {
 			glog.Infof("Registering %s to controller manager", rName)
-			if err := r.register(mgr, cfg); err != nil {
+			if err := r.register(mgr, ctx); err != nil {
 				glog.Errorf("Got error when registering %s, error: %v", rName, err)
 				return err
 			}

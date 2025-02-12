@@ -4,49 +4,64 @@
 [![codecov](https://codecov.io/gh/fluid-cloudnative/fluid/branch/master/graph/badge.svg)](https://codecov.io/gh/fluid-cloudnative/fluid)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fluid-cloudnative/fluid)](https://goreportcard.com/report/github.com/fluid-cloudnative/fluid)
 [![Artifact HUB](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/fluid)](https://artifacthub.io/packages/helm/fluid/fluid)
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Ffluid-cloudnative%2Ffluid.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Ffluid-cloudnative%2Ffluid?ref=badge_shield)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/fluid-cloudnative/fluid/badge)](https://scorecard.dev/viewer/?uri=github.com/fluid-cloudnative/fluid)
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/4886/badge)](https://bestpractices.coreinfrastructure.org/projects/4886)
-
+[![Leaderboard](https://img.shields.io/badge/Fluid-%E6%9F%A5%E7%9C%8B%E8%B4%A1%E7%8C%AE%E6%8E%92%E8%A1%8C%E6%A6%9C-orange)](https://opensource.alibaba.com/contribution_leaderboard/details?projectValue=fluid)
 
 # Fluid
 
 [English](./README.md) | 简体中文
 
-|![更新](http://kubeflow.oss-cn-beijing.aliyuncs.com/Static/bell-outline-badge.svg) 最新进展：|
+|![更新](static/bell-outline-badge.svg) 最新进展：|
 |------------------|
-|Mar. 16th, 2021. Fluid v0.5.0 **发布**! 提供一系列新功能，包括提供数据集缓存的在线弹性扩缩容，元数据备份与恢复，Fuse全局模式部署等，详情参见 [CHANGELOG](CHANGELOG.md)。|
-|Nov. 6th, 2020. Fluid v0.4.0 **发布**! 提供一系列新功能和修复上一版本的遗留问题，包括提供主动的数据预热，详情参见 [CHANGELOG](CHANGELOG.md)。|
-|Oct. 1st, 2020. Fluid v0.3.0 **发布**! 提供一系列新功能和修复上一版本的遗留问题，包括对于K8s通用的数据卷加速和主机目录加速，详情参见 [CHANGELOG](CHANGELOG.md)。|
+|**最新版发布**：2024年4月17日, Fluid v1.0.0  发布! 版本更新介绍详情情参见 [CHANGELOG](CHANGELOG.md)。|
+|v0.9.0版发布：2023年5月26日, Fluid v0.9.0  发布! 版本更新介绍详情情参见 [CHANGELOG](CHANGELOG.md)。|
+|v0.8.0版发布：2022年9月3日, Fluid v0.8.0  发布! 版本更新介绍详情情参见 [CHANGELOG](CHANGELOG.md)。|
+|v0.7.0版发布：2022年3月2日, Fluid v0.7.0  发布! 版本更新介绍详情情参见 [CHANGELOG](CHANGELOG.md)。|
+|v0.6.0版发布：2021年8月11日, Fluid v0.6.0  发布! 版本更新介绍详情情参见 [CHANGELOG](CHANGELOG.md)。|
+|v0.5.0版发布：2021年5月16日, Fluid v0.6.0  发布! 版本更新介绍详情情参见 [CHANGELOG](CHANGELOG.md)。|
+|进入CNCF：2021年4月27日, Fluid通过CNCF Technical Oversight Committee (TOC)投票决定被接受进入CNCF，成为[CNCF Sandbox Project](https://lists.cncf.io/g/cncf-toc/message/5822)。|
+|v0.4.0版发布：2020年11月6日, Fluid v0.6.0  发布! 版本更新介绍详情情参见 [CHANGELOG](CHANGELOG.md)。|
+|v0.3.0版发布：2020年10月1日, Fluid v0.6.0  发布! 版本更新介绍详情情参见 [CHANGELOG](CHANGELOG.md)。|
 
 ## 什么是Fluid
 
-Fluid是一个开源的Kubernetes原生的分布式数据集编排和加速引擎，主要服务于云原生场景下的数据密集型应用，例如大数据应用、AI应用等。通过定义数据集资源的抽象，实现如下功能：
+Fluid是一个开源的Kubernetes原生的分布式数据集编排和加速引擎，主要服务于云原生场景下的数据密集型应用，例如大数据应用、AI应用等。
+
+Fluid现在是[Cloud Native Computing Foundation](https://cncf.io) (CNCF) 开源基金会旗下的一个沙箱项目。关于Fluid更多的原理性介绍, 可以参见我们的论文: 
+
+1. **Rong Gu, Kai Zhang, Zhihao Xu, et al. [Fluid: Dataset Abstraction and Elastic Acceleration for Cloud-native Deep Learning Training Jobs](https://ieeexplore.ieee.org/abstract/document/9835158). IEEE ICDE, pp. 2183-2196, May, 2022. (Conference Version)**
+
+2. **Rong Gu, Zhihao Xu, Yang Che, et al. [High-level Data Abstraction and Elastic Data Caching for Data-intensive AI Applications on Cloud-native Platforms](https://ieeexplore.ieee.org/document/10249214). IEEE TPDS, pp. 2946-2964, Vol 34(11), 2023. (Journal Version)**
+
+
+通过定义数据集资源的抽象，实现如下功能：
 
 <div align="center">
-  <img src="http://kubeflow.oss-cn-beijing.aliyuncs.com/Static/architecture.png" title="architecture" width="60%" height="60%" alt="">
+  <img src="static/architecture.png" title="architecture" width="60%" height="60%" alt="">
 </div>
 
 ## 核心功能
 
 - __数据集抽象原生支持__
 
-  	将数据密集型应用所需基础支撑能力功能化，实现数据高效访问并降低多维管理成本
+  将数据密集型应用所需基础支撑能力功能化，实现数据高效访问并降低多维管理成本
 
-- __云上数据预热与加速__
+- __可扩展的数据引擎插件__
 
-	Fluid通过使用分布式缓存引擎（Alluxio inside）为云上应用提供数据预热与加速，同时可以保障缓存数据的**可观测性**，**可迁移性**和**自动化的水平扩展**
+	提供统一的访问接口，方便接入第三方存储，通过不同的Runtime实现数据操作
 
-- __数据应用协同编排__
+- __自动化的数据操作__
 
-  	在云上调度应用和数据时候，同时考虑两者特性与位置，实现协同编排，提升性能
+  提供多种操作模式，与自动化运维体系相结合
 
-- __多命名空间管理支持__
+- __数据弹性与调度__
 
-	用户可以创建和管理不同namespace的数据集
+	将数据缓存技术和弹性扩缩容、数据亲和性调度能力相结合，提高数据访问性能
 
-- __异构数据源管理__
+- __运行时平台无关__
 
-	一次性统一访问不同来源的底层数据（对象存储，HDFS和Ceph等存储)，适用于混合云场景
+	支持原生、边缘、Serverless Kubernetes集群、Kubernetes多集群等多样化环境，适用于混合云场景
 
 ## 重要概念
 
@@ -54,12 +69,10 @@ Fluid是一个开源的Kubernetes原生的分布式数据集编排和加速引�
 
 **Runtime**: 实现数据集安全性，版本管理和数据加速等能力的执行引擎，定义了一系列生命周期的接口。可以通过实现这些接口，支持数据集的管理和加速。
 
-**AlluxioRuntime**: 来源于[Alluixo](https://www.alluxio.org/)社区，是支撑Dataset数据管理和缓存的执行引擎实现。Fluid通过管理和调度Alluxio Runtime实现数据集的可见性，弹性伸缩， 数据迁移。
-
 ## 先决条件
 
 - Kubernetes version > 1.16, 支持CSI
-- Golang 1.12+
+- Golang 1.18+
 - Helm 3
 
 ## 快速开始
@@ -80,14 +93,14 @@ Fluid是一个开源的Kubernetes原生的分布式数据集编排和加速引�
 <details>
 <summary>演示 1: 加速文件访问</summary>
 <pre>
-<a href="http://cloud.video.taobao.com/play/u/2987821887/p/1/e/6/t/1/277753111709.mp4" rel="nofollow"><img src="https://camo.githubusercontent.com/2ee9ef7de9eeb386f365a5d10f5defd12f08457f/687474703a2f2f6b756265666c6f772e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f5374617469632f72656d6f74655f66696c655f616363657373696e672e706e67" alt="" data-canonical-src="http://kubeflow.oss-cn-beijing.aliyuncs.com/Static/remote_file_accessing.png" style="max-width:100%;"></a>
+<a href="http://cloud.video.taobao.com/play/u/2987821887/p/1/e/6/t/1/277753111709.mp4" rel="nofollow"><img src="https://camo.githubusercontent.com/2ee9ef7de9eeb386f365a5d10f5defd12f08457f/687474703a2f2f6b756265666c6f772e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f5374617469632f72656d6f74655f66696c655f616363657373696e672e706e67" alt="" data-canonical-src="static/remote_file_accessing.png" style="max-width:100%;"></a>
 </pre>
 </details>
 
 <details>
 <summary>演示 2: 加速机器学习</summary>
 <pre>
-<a href="http://cloud.video.taobao.com/play/u/2987821887/p/1/e/6/t/1/277528130570.mp4" rel="nofollow"><img src="https://camo.githubusercontent.com/5688ab788da9f8cd057e32f3764784ce616ff0fd/687474703a2f2f6b756265666c6f772e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f5374617469632f6d616368696e655f6c6561726e696e672e706e67" alt="" data-canonical-src="http://kubeflow.oss-cn-beijing.aliyuncs.com/Static/machine_learning.png" style="max-width:100%;"></a>
+<a href="http://cloud.video.taobao.com/play/u/2987821887/p/1/e/6/t/1/277528130570.mp4" rel="nofollow"><img src="https://camo.githubusercontent.com/5688ab788da9f8cd057e32f3764784ce616ff0fd/687474703a2f2f6b756265666c6f772e6f73732d636e2d6265696a696e672e616c6979756e63732e636f6d2f5374617469632f6d616368696e655f6c6561726e696e672e706e67" alt="" data-canonical-src="static/machine_learning.png" style="max-width:100%;"></a>
 </pre>
 </details>
 
@@ -118,11 +131,23 @@ Fluid是一个开源的Kubernetes原生的分布式数据集编排和加速引�
 
 ## 欢迎加入与反馈
 
-Fluid让Kubernetes真正具有分布式数据缓存的基础能力，开源只是一个起点，需要大家的共同参与。大家在使用过程发现Bug或需要的Feature，都可以直接在 [GitHub](https://github.com/fluid-cloudnative/fluid)上面提 issue 或 PR，一起参与讨论。另外我们有一个钉钉群，欢迎您的参与和讨论。
+Fluid让Kubernetes真正具有分布式数据缓存的基础能力，开源只是一个起点，需要大家的共同参与。大家在使用过程发现Bug或需要的Feature，都可以直接在 [GitHub](https://github.com/fluid-cloudnative/fluid)上面提 issue 或 PR，一起参与讨论。另外我们有钉钉与微信交流群，欢迎您的参与和讨论。
 
 钉钉讨论群
 <div>
-  <img src="http://kubeflow.oss-cn-beijing.aliyuncs.com/Static/dingtalk.png" width="280" title="dingtalk">
+  <img src="static/dingtalk.png" width="280" title="dingtalk">
+</div>
+
+微信讨论群:
+
+<div>
+  <img src="static/wechat.png" width="280" title="dingtalk">
+</div>
+
+微信官方公众号:
+
+<div>
+  <img src="https://fluid-imgs.oss-cn-shanghai.aliyuncs.com/public/imgs/wxgzh_code.png" width="280" title="dingtalk">
 </div>
 
 Slack 讨论群
@@ -132,6 +157,10 @@ Slack 讨论群
 
 Fluid采用Apache 2.0 license开源协议，详情参见[LICENSE](./LICENSE)文件。
 
+## 漏洞报告
+
+安全性是Fluid项目高度关注的事务。如果您发现或遇到安全相关的问题，欢迎您给fluid.opensource.project@gmail.com邮箱发送邮件报告。具体细节请查看[SECURITY.md](SECURITY.md)。
+
 ## 行为准则
 
-Fluid 遵守 [CNCF 行为准则](https://github.com/cncf/foundation/blob/master/code-of-conduct.md).
+Fluid 遵守 [CNCF 行为准则](https://github.com/cncf/foundation/blob/master/code-of-conduct.md)。

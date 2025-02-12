@@ -21,10 +21,10 @@ import (
 	"testing"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
-	utilpointer "k8s.io/utils/pointer"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	"k8s.io/utils/ptr"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -40,11 +40,11 @@ func TestCheckWorkerAffinity(t *testing.T) {
 	namespace := "big-data"
 	runtimeObjs := []runtime.Object{}
 	mockClient := fake.NewFakeClientWithScheme(s, runtimeObjs...)
-	runtimeInfo, err := base.BuildRuntimeInfo(name, namespace, "jindo", datav1alpha1.TieredStore{})
+	runtimeInfo, err := base.BuildRuntimeInfo(name, namespace, common.JindoRuntime)
 	if err != nil {
 		t.Errorf("testcase %s failed due to %v", name, err)
 	}
-	h := BuildHelper(runtimeInfo, mockClient, log.NullLogger{})
+	h := BuildHelper(runtimeInfo, mockClient, fake.NullLogger())
 
 	tests := []struct {
 		name   string
@@ -59,7 +59,7 @@ func TestCheckWorkerAffinity(t *testing.T) {
 					Namespace: namespace,
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: utilpointer.Int32Ptr(1),
+					Replicas: ptr.To[int32](1),
 				},
 			},
 			want: false,
@@ -71,7 +71,7 @@ func TestCheckWorkerAffinity(t *testing.T) {
 					Namespace: namespace,
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: utilpointer.Int32Ptr(1),
+					Replicas: ptr.To[int32](1),
 					Template: v1.PodTemplateSpec{
 						Spec: v1.PodSpec{
 							Affinity: &v1.Affinity{}}},
@@ -86,7 +86,7 @@ func TestCheckWorkerAffinity(t *testing.T) {
 					Namespace: namespace,
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: utilpointer.Int32Ptr(1),
+					Replicas: ptr.To[int32](1),
 					Template: v1.PodTemplateSpec{
 						Spec: v1.PodSpec{
 							Affinity: &v1.Affinity{
@@ -148,7 +148,7 @@ func TestCheckWorkerAffinity(t *testing.T) {
 					Namespace: namespace,
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: utilpointer.Int32Ptr(1),
+					Replicas: ptr.To[int32](1),
 					Template: v1.PodTemplateSpec{
 						Spec: v1.PodSpec{
 							Affinity: &v1.Affinity{
@@ -222,7 +222,7 @@ func TestSetupWorkers(t *testing.T) {
 
 	// runtimeInfoSpark tests create worker in exclusive mode.
 
-	runtimeInfoSpark, err := base.BuildRuntimeInfo("spark", "big-data", "jindo", datav1alpha1.TieredStore{})
+	runtimeInfoSpark, err := base.BuildRuntimeInfo("spark", "big-data", common.JindoRuntime)
 
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
@@ -232,7 +232,7 @@ func TestSetupWorkers(t *testing.T) {
 	})
 
 	// runtimeInfoSpark tests create worker in shareMode mode.
-	runtimeInfoHadoop, err := base.BuildRuntimeInfo("hadoop", "big-data", "jindo", datav1alpha1.TieredStore{})
+	runtimeInfoHadoop, err := base.BuildRuntimeInfo("hadoop", "big-data", common.JindoRuntime)
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
 	}
@@ -242,7 +242,7 @@ func TestSetupWorkers(t *testing.T) {
 	nodeSelector := map[string]string{
 		"node-select": "true",
 	}
-	runtimeInfoHadoop.SetupFuseDeployMode(true, nodeSelector)
+	runtimeInfoHadoop.SetFuseNodeSelector(nodeSelector)
 
 	type fields struct {
 		replicas    int32
@@ -276,7 +276,7 @@ func TestSetupWorkers(t *testing.T) {
 						Namespace: "big-data",
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: utilpointer.Int32Ptr(1),
+						Replicas: ptr.To[int32](1),
 					},
 				},
 				runtime: &datav1alpha1.JindoRuntime{
@@ -313,7 +313,7 @@ func TestSetupWorkers(t *testing.T) {
 						Namespace: "big-data",
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: utilpointer.Int32Ptr(1),
+						Replicas: ptr.To[int32](1),
 					},
 				},
 				runtime: &datav1alpha1.JindoRuntime{
@@ -363,7 +363,7 @@ func TestSetupWorkers(t *testing.T) {
 			runtimeObjs = append(runtimeObjs, data)
 			mockClient := fake.NewFakeClientWithScheme(s, runtimeObjs...)
 
-			h := BuildHelper(tt.fields.runtimeInfo, mockClient, log.NullLogger{})
+			h := BuildHelper(tt.fields.runtimeInfo, mockClient, fake.NullLogger())
 
 			err := h.SetupWorkers(tt.fields.runtime, tt.fields.runtime.Status, &tt.fields.worker)
 
@@ -428,9 +428,7 @@ func TestCheckWorkersReady(t *testing.T) {
 					},
 					Spec: datav1alpha1.JindoRuntimeSpec{
 						Replicas: 1,
-						Fuse: datav1alpha1.JindoFuseSpec{
-							Global: true,
-						},
+						Fuse:     datav1alpha1.JindoFuseSpec{},
 					},
 				},
 				worker: &appsv1.StatefulSet{
@@ -458,9 +456,7 @@ func TestCheckWorkersReady(t *testing.T) {
 					},
 					Spec: datav1alpha1.JindoRuntimeSpec{
 						Replicas: 1,
-						Fuse: datav1alpha1.JindoFuseSpec{
-							Global: true,
-						},
+						Fuse:     datav1alpha1.JindoFuseSpec{},
 					},
 				},
 				worker: &appsv1.StatefulSet{
@@ -488,9 +484,7 @@ func TestCheckWorkersReady(t *testing.T) {
 					},
 					Spec: datav1alpha1.JindoRuntimeSpec{
 						Replicas: 2,
-						Fuse: datav1alpha1.JindoFuseSpec{
-							Global: true,
-						},
+						Fuse:     datav1alpha1.JindoFuseSpec{},
 					},
 				},
 				worker: &appsv1.StatefulSet{
@@ -517,9 +511,7 @@ func TestCheckWorkersReady(t *testing.T) {
 					},
 					Spec: datav1alpha1.JindoRuntimeSpec{
 						Replicas: 2,
-						Fuse: datav1alpha1.JindoFuseSpec{
-							Global: true,
-						},
+						Fuse:     datav1alpha1.JindoFuseSpec{},
 					},
 					Status: datav1alpha1.RuntimeStatus{
 						WorkerPhase: datav1alpha1.RuntimePhasePartialReady,
@@ -562,15 +554,15 @@ func TestCheckWorkersReady(t *testing.T) {
 			// 	name:      tt.fields.name,
 			// 	namespace: tt.fields.namespace,
 			// 	Client:    mockClient,
-			// 	Log:       log.NullLogger{},
+			// 	Log:       fake.NullLogger(),
 			// }
 
-			runtimeInfo, err := base.BuildRuntimeInfo(tt.fields.name, tt.fields.namespace, "jindo", datav1alpha1.TieredStore{})
+			runtimeInfo, err := base.BuildRuntimeInfo(tt.fields.name, tt.fields.namespace, common.JindoRuntime)
 			if err != nil {
 				t.Errorf("testcase %s failed due to %v", tt.fields.name, err)
 			}
 
-			h := BuildHelper(runtimeInfo, mockClient, log.NullLogger{})
+			h := BuildHelper(runtimeInfo, mockClient, fake.NullLogger())
 
 			gotReady, err := h.CheckWorkersReady(tt.fields.runtime, tt.fields.runtime.Status, tt.fields.worker)
 

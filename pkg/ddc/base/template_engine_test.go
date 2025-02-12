@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Fluid Authors.
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ package base_test
 import (
 	"context"
 	"os"
-
 	"reflect"
 	"testing"
 
@@ -36,23 +35,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryRuntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var _ = Describe("TemplateEngine", func() {
 	mockDatasetName := "fluid-data-set"
-	mockDataLoadName := "fluid-data-load"
 	mockNamespace := "default"
 
 	fakeDataset := &datav1alpha1.Dataset{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mockDatasetName,
-			Namespace: mockNamespace,
-		},
-	}
-	fakeDataLoad := datav1alpha1.DataLoad{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      mockDataLoadName,
 			Namespace: mockNamespace,
 		},
 	}
@@ -67,10 +58,10 @@ var _ = Describe("TemplateEngine", func() {
 			Name:      mockDatasetName,
 		},
 		Client:        fakeClient,
-		Log:           log.NullLogger{},
+		Log:           fake.NullLogger(),
 		RuntimeType:   "test-runtime-type",
 		FinalizerName: "test-finalizer-name",
-		Runtime:       nil,
+		Runtime:       &datav1alpha1.AlluxioRuntime{},
 	}
 	var t *base.TemplateEngine
 
@@ -133,11 +124,13 @@ var _ = Describe("TemplateEngine", func() {
 			It("Should sync successfully", func() {
 				gomock.InOrder(
 					impl.EXPECT().SyncMetadata().Return(nil).Times(1),
-					impl.EXPECT().CheckAndUpdateRuntimeStatus().Return(true, nil).Times(1),
-					impl.EXPECT().UpdateCacheOfDataset().Return(nil).Times(1),
+					// impl.EXPECT().CheckAndUpdateRuntimeStatus().Return(true, nil).Times(1),
+					// impl.EXPECT().UpdateCacheOfDataset().Return(nil).Times(1),
 					impl.EXPECT().SyncReplicas(gomock.Eq(fakeCtx)).Return(nil).Times(1),
+					impl.EXPECT().SyncRuntime(gomock.Eq(fakeCtx)).Return(false, nil).Times(1),
 					impl.EXPECT().CheckRuntimeHealthy().Return(nil).Times(1),
 					impl.EXPECT().CheckAndUpdateRuntimeStatus().Return(true, nil).Times(1),
+					impl.EXPECT().UpdateCacheOfDataset().Return(nil).Times(1),
 					impl.EXPECT().ShouldUpdateUFS().Return(&utils.UFSToUpdate{}).Times(1),
 					impl.EXPECT().SyncScheduleInfoToCacheNodes().Return(nil).Times(1),
 				)
@@ -166,11 +159,13 @@ var _ = Describe("TemplateEngine", func() {
 
 				gomock.InOrder(
 					impl.EXPECT().SyncMetadata().Return(nil).Times(1),
-					impl.EXPECT().CheckAndUpdateRuntimeStatus().Return(true, nil).Times(1),
-					impl.EXPECT().UpdateCacheOfDataset().Return(nil).Times(1),
+					// impl.EXPECT().CheckAndUpdateRuntimeStatus().Return(true, nil).Times(1),
+					// impl.EXPECT().UpdateCacheOfDataset().Return(nil).Times(1),
 					impl.EXPECT().SyncReplicas(gomock.Eq(fakeCtx)).Return(nil).Times(1),
+					impl.EXPECT().SyncRuntime(gomock.Eq(fakeCtx)).Return(false, nil).Times(1),
 					impl.EXPECT().CheckRuntimeHealthy().Return(nil).Times(1),
 					impl.EXPECT().CheckAndUpdateRuntimeStatus().Return(true, nil).Times(1),
+					impl.EXPECT().UpdateCacheOfDataset().Return(nil).Times(1),
 					impl.EXPECT().ShouldUpdateUFS().Return(ufsToUpdate).Times(1),
 					impl.EXPECT().UpdateOnUFSChange(ufsToUpdate).Times(1),
 					impl.EXPECT().SyncScheduleInfoToCacheNodes().Return(nil).Times(1),
@@ -207,13 +202,6 @@ var _ = Describe("TemplateEngine", func() {
 		})
 	})
 
-	Describe("LoadData", func() {
-		It("Should Load data successfully", func() {
-			impl.EXPECT().CreateDataLoadJob(fakeCtx, fakeDataLoad).Return(nil).Times(1)
-			Expect(t.LoadData(fakeCtx, fakeDataLoad)).To(BeNil())
-		})
-	})
-
 	Describe("CheckRuntimeReady", func() {
 		It("Should check runtime is ready", func() {
 			impl.EXPECT().CheckRuntimeReady().Return(true).Times(1)
@@ -221,12 +209,12 @@ var _ = Describe("TemplateEngine", func() {
 		})
 	})
 
-	Describe("CheckExistenceOfPath", func() {
-		It("Should check path exists", func() {
-			impl.EXPECT().CheckExistenceOfPath(fakeDataLoad).Return(false, nil)
-			Expect(t.CheckExistenceOfPath(fakeDataLoad)).Should(Equal(false))
-		})
-	})
+	// Describe("CheckExistenceOfPath", func() {
+	// 	It("Should check path exists", func() {
+	// 		impl.EXPECT().CheckExistenceOfPath(fakeDataLoad).Return(false, nil)
+	// 		Expect(t.CheckExistenceOfPath(fakeDataLoad)).Should(Equal(false))
+	// 	})
+	// })
 })
 
 var (
@@ -248,8 +236,9 @@ func TestNewTemplateEngine(t *testing.T) {
 			Namespace: "fluid",
 		},
 		Client:      client,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 		RuntimeType: "alluxio",
+		Runtime:     &datav1alpha1.AlluxioRuntime{},
 	}
 
 	templateEngine := base.NewTemplateEngine(engine, id, ctx)
@@ -273,8 +262,9 @@ func TestID(t *testing.T) {
 			Namespace: "fluid",
 		},
 		Client:      client,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 		RuntimeType: "alluxio",
+		Runtime:     &datav1alpha1.AlluxioRuntime{},
 	}
 
 	templateEngine := base.NewTemplateEngine(engine, id, ctx)

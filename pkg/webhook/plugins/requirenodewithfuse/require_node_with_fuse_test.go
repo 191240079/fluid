@@ -20,7 +20,6 @@ import (
 	"reflect"
 	"testing"
 
-	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,13 +27,13 @@ import (
 )
 
 func TestGetRequiredSchedulingTermWithGlobalMode(t *testing.T) {
-	runtimeInfo, err := base.BuildRuntimeInfo("test", "fluid", "alluxio", datav1alpha1.TieredStore{})
+	runtimeInfo, err := base.BuildRuntimeInfo("test", "fluid", "alluxio")
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
 	}
 
 	// Test case 1: Global fuse with selector enable
-	runtimeInfo.SetupFuseDeployMode(true, map[string]string{"test1": "test1"})
+	runtimeInfo.SetFuseNodeSelector(map[string]string{"test1": "test1"})
 	terms, _ := getRequiredSchedulingTerm(runtimeInfo)
 
 	expectTerms := corev1.NodeSelectorTerm{
@@ -52,7 +51,7 @@ func TestGetRequiredSchedulingTermWithGlobalMode(t *testing.T) {
 	}
 
 	// Test case 2: Global fuse with selector disable
-	runtimeInfo.SetupFuseDeployMode(true, map[string]string{})
+	runtimeInfo.SetFuseNodeSelector(map[string]string{})
 	terms, _ = getRequiredSchedulingTerm(runtimeInfo)
 	expectTerms = corev1.NodeSelectorTerm{MatchExpressions: []corev1.NodeSelectorRequirement{}}
 
@@ -73,12 +72,15 @@ func TestMutate(t *testing.T) {
 		pod    *corev1.Pod
 	)
 
-	plugin := NewPlugin(client)
-	if plugin.GetName() != NAME {
-		t.Errorf("GetName expect %v, got %v", NAME, plugin.GetName())
+	plugin, err := NewPlugin(client, "")
+	if err != nil {
+		t.Error("new plugin occurs error", err)
+	}
+	if plugin.GetName() != Name {
+		t.Errorf("GetName expect %v, got %v", Name, plugin.GetName())
 	}
 
-	runtimeInfo, err := base.BuildRuntimeInfo("test", "fluid", "alluxio", datav1alpha1.TieredStore{})
+	runtimeInfo, err := base.BuildRuntimeInfo("test", "fluid", "alluxio")
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
 	}
