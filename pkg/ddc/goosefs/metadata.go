@@ -1,4 +1,5 @@
 /*
+Copyright 2022 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -12,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package goosefs
 
 import (
@@ -23,19 +25,11 @@ import (
 	"time"
 
 	"github.com/fluid-cloudnative/fluid/pkg/common"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/goosefs/operations"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"k8s.io/client-go/util/retry"
 )
-
-// MetadataSyncResult describes result for asynchronous metadata sync
-type MetadataSyncResult struct {
-	Done      bool
-	StartTime time.Time
-	UfsTotal  string
-	FileNum   string
-	Err       error
-}
 
 // SyncMetadata syncs metadata if necessary
 // For GooseFS Engine, metadata sync is an asynchronous operation, which means
@@ -76,7 +70,7 @@ func (e *GooseFSEngine) shouldSyncMetadata() (should bool, err error) {
 
 	//todo(xuzhihao): option to enable/disable automatic metadata sync
 	//todo: periodical metadata sync
-	if dataset.Status.UfsTotal != "" && dataset.Status.UfsTotal != METADATA_SYNC_NOT_DONE_MSG {
+	if dataset.Status.UfsTotal != "" && dataset.Status.UfsTotal != MetadataSyncNotDoneMsg {
 		e.Log.V(1).Info("dataset ufs is ready",
 			"dataset name", dataset.Name,
 			"dataset namespace", dataset.Namespace,
@@ -88,7 +82,7 @@ func (e *GooseFSEngine) shouldSyncMetadata() (should bool, err error) {
 	return should, nil
 }
 
-//  shouldRestoreMetadata checks whether should restore metadata from backup
+// shouldRestoreMetadata checks whether should restore metadata from backup
 func (e *GooseFSEngine) shouldRestoreMetadata() (should bool, err error) {
 	dataset, err := utils.GetDataset(e.Client, e.name, e.namespace)
 	if err != nil {
@@ -172,8 +166,9 @@ func (e *GooseFSEngine) RestoreMetadataInternal() (err error) {
 // syncMetadataInternal do the actual work of metadata sync
 // At any time, there is at most one goroutine working on metadata sync. First call to
 // this function will start a goroutine including the following two steps:
-//   1. load metadata
-//   2. get total size of UFSs
+//  1. load metadata
+//  2. get total size of UFSs
+//
 // Any following calls to this function will try to get result of the working goroutine with a timeout, which
 // ensures the function won't block the following Sync operations(e.g. CheckAndUpdateRuntimeStatus) for a long time.
 func (e *GooseFSEngine) syncMetadataInternal() (err error) {
@@ -211,7 +206,7 @@ func (e *GooseFSEngine) syncMetadataInternal() (err error) {
 				e.Log.Error(result.Err, "Metadata sync failed")
 				return result.Err
 			}
-		case <-time.After(CHECK_METADATA_SYNC_DONE_TIMEOUT_MILLISEC * time.Millisecond):
+		case <-time.After(CheckMetadataSyncDoneTimeoutMillisec * time.Millisecond):
 			e.Log.V(1).Info("Metadata sync still in progress")
 		}
 	} else {
@@ -222,8 +217,8 @@ func (e *GooseFSEngine) syncMetadataInternal() (err error) {
 				return
 			}
 			datasetToUpdate := dataset.DeepCopy()
-			datasetToUpdate.Status.UfsTotal = METADATA_SYNC_NOT_DONE_MSG
-			datasetToUpdate.Status.FileNum = METADATA_SYNC_NOT_DONE_MSG
+			datasetToUpdate.Status.UfsTotal = MetadataSyncNotDoneMsg
+			datasetToUpdate.Status.FileNum = MetadataSyncNotDoneMsg
 			if !reflect.DeepEqual(dataset, datasetToUpdate) {
 				err = e.Client.Status().Update(context.TODO(), datasetToUpdate)
 				if err != nil {
@@ -235,10 +230,10 @@ func (e *GooseFSEngine) syncMetadataInternal() (err error) {
 		if err != nil {
 			e.Log.Error(err, "Failed to set UfsTotal to METADATA_SYNC_NOT_DONE_MSG")
 		}
-		e.MetadataSyncDoneCh = make(chan MetadataSyncResult)
-		go func(resultChan chan MetadataSyncResult) {
+		e.MetadataSyncDoneCh = make(chan base.MetadataSyncResult)
+		go func(resultChan chan base.MetadataSyncResult) {
 			defer close(resultChan)
-			result := MetadataSyncResult{
+			result := base.MetadataSyncResult{
 				StartTime: time.Now(),
 				UfsTotal:  "",
 			}

@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Fluid Authors.
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ package fusesidecar
 import (
 	"testing"
 
-	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,12 +31,15 @@ func TestMutate(t *testing.T) {
 		pod    *corev1.Pod
 	)
 
-	plugin := NewPlugin(client)
+	plugin, err := NewPlugin(client, "")
+	if err != nil {
+		t.Error("new plugin occurs error", err)
+	}
 	if plugin.GetName() != Name {
 		t.Errorf("GetName expect %v, got %v", Name, plugin.GetName())
 	}
 
-	runtimeInfo, err := base.BuildRuntimeInfo("test", "fluid", "alluxio", datav1alpha1.TieredStore{})
+	runtimeInfo, err := base.BuildRuntimeInfo("test", "fluid", "alluxio")
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
 	}

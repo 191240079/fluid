@@ -1,4 +1,5 @@
 /*
+Copyright 2022 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
@@ -33,6 +35,7 @@ func (e *GooseFSEngine) transform(runtime *datav1alpha1.GooseFSRuntime) (value *
 		err = fmt.Errorf("the goosefsRuntime is null")
 		return
 	}
+	defer utils.TimeTrack(time.Now(), "GooseFSRuntime.Transform", "name", runtime.Name)
 
 	dataset, err := utils.GetDataset(e.Client, e.name, e.namespace)
 	if err != nil {
@@ -42,6 +45,7 @@ func (e *GooseFSEngine) transform(runtime *datav1alpha1.GooseFSRuntime) (value *
 	value = &GooseFS{}
 
 	value.FullnameOverride = e.name
+	value.OwnerDatasetId = utils.GetDatasetId(e.namespace, e.name, e.runtimeInfo.GetOwnerDatasetUID())
 
 	// 1.transform the common part
 	err = e.transformCommonPart(runtime, dataset, value)
@@ -135,7 +139,7 @@ func (e *GooseFSEngine) transformCommonPart(runtime *datav1alpha1.GooseFSRuntime
 	uRootPath, m := utils.UFSPathBuilder{}.GenAlluxioUFSRootPath(dataset.Spec.Mounts)
 	// attach mount options when direct mount ufs endpoint
 	if m != nil {
-		if mOptions, err := e.genUFSMountOptions(*m); err != nil {
+		if mOptions, err := e.genUFSMountOptions(*m, dataset.Spec.SharedOptions, dataset.Spec.SharedEncryptOptions); err != nil {
 			return err
 		} else {
 			for k, v := range mOptions {
@@ -217,7 +221,7 @@ func (e *GooseFSEngine) transformCommonPart(runtime *datav1alpha1.GooseFSRuntime
 	}
 
 	if !runtime.Spec.DisablePrometheus {
-		value.Monitoring = GOOSEFS_RUNTIME_METRICS_LABEL
+		value.Monitoring = GooseFSRuntimeMetricsLabel
 	}
 
 	// transform Tolerations
@@ -356,7 +360,7 @@ func (e *GooseFSEngine) transformWorkers(runtime *datav1alpha1.GooseFSRuntime, v
 
 // 8.allocate port for fluid engine
 func (e *GooseFSEngine) allocatePorts(value *GooseFS) error {
-	expectedPortNum := PORT_NUM
+	expectedPortNum := PortNum
 
 	if e.runtime.Spec.APIGateway.Enabled {
 		expectedPortNum += 1

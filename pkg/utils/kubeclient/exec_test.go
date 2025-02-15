@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Author.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +18,6 @@ package kubeclient
 
 import (
 	"errors"
-	"os"
 	"testing"
 
 	"github.com/brahma-adshonor/gohook"
@@ -66,12 +66,9 @@ func TestInitClient(t *testing.T) {
 		}
 	}
 
-	err := os.Setenv(common.RecommendedKubeConfigPathEnv, "Path for test")
-	if err != nil {
-		t.Errorf("expected no error, get %v", err)
-	}
+	t.Setenv(common.RecommendedKubeConfigPathEnv, "Path for test")
 
-	err = gohook.Hook(utils.PathExists, PathExistsTrue, nil)
+	err := gohook.Hook(utils.PathExists, PathExistsTrue, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}

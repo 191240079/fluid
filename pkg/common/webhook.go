@@ -27,11 +27,13 @@ const (
 	WebhookSchedulePodPath = "mutate-fluid-io-v1alpha1-schedulepod"
 
 	CertSecretName = "fluid-webhook-certs"
+
+	WebhookPluginFilePath = "/etc/fluid/plugins.profile"
 )
 
 // AdmissionHandler wrappers admission.Handler, but adding client-go capablities
 type AdmissionHandler interface {
 	admission.Handler
 
-	Setup(client client.Client)
+	Setup(client client.Client, decoder *admission.Decoder)
 }

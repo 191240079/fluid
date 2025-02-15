@@ -17,7 +17,6 @@ limitations under the License.
 package base
 
 import (
-	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
+
 	fakeutils "github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	v1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -32,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func Test_convertToTieredstoreInfo(t *testing.T) {
@@ -193,7 +192,7 @@ func TestBuildRuntimeInfo(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotRuntime, err := BuildRuntimeInfo(tt.args.name, tt.args.namespace, tt.args.runtimeType, tt.args.tieredstore)
+			gotRuntime, err := BuildRuntimeInfo(tt.args.name, tt.args.namespace, tt.args.runtimeType, WithTieredStore(tt.args.tieredstore))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("BuildRuntimeInfo() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -245,7 +244,7 @@ func TestCleanPolicy(t *testing.T) {
 				{
 					Name:      "default_policy_alluxio",
 					Namespace: "default",
-					Type:      common.ALLUXIO_RUNTIME,
+					Type:      common.AlluxioRuntime,
 				},
 			},
 		},
@@ -273,7 +272,7 @@ func TestCleanPolicy(t *testing.T) {
 				{
 					Name:      "on_demand_policy_alluxio",
 					Namespace: "default",
-					Type:      common.ALLUXIO_RUNTIME,
+					Type:      common.AlluxioRuntime,
 				},
 			},
 		},
@@ -301,7 +300,7 @@ func TestCleanPolicy(t *testing.T) {
 				{
 					Name:      "on_runtime_deleted_policy_alluxio",
 					Namespace: "default",
-					Type:      common.ALLUXIO_RUNTIME,
+					Type:      common.AlluxioRuntime,
 				},
 			},
 		},
@@ -597,10 +596,8 @@ func TestCleanPolicy(t *testing.T) {
 			want: &RuntimeInfo{
 				name:        "default_policy_alluxio",
 				namespace:   "default",
-				runtimeType: common.ALLUXIO_RUNTIME,
-				// fuse global is set to true since v0.7.0
+				runtimeType: common.AlluxioRuntime,
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnRuntimeDeletedCleanPolicy,
 				},
 			},
@@ -616,10 +613,8 @@ func TestCleanPolicy(t *testing.T) {
 			want: &RuntimeInfo{
 				name:        "on_demand_policy_alluxio",
 				namespace:   "default",
-				runtimeType: common.ALLUXIO_RUNTIME,
-				// fuse global is set to true since v0.7.0
+				runtimeType: common.AlluxioRuntime,
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnDemandCleanPolicy,
 				},
 			},
@@ -635,10 +630,8 @@ func TestCleanPolicy(t *testing.T) {
 			want: &RuntimeInfo{
 				name:        "on_runtime_deleted_policy_alluxio",
 				namespace:   "default",
-				runtimeType: common.ALLUXIO_RUNTIME,
-				// fuse global is set to true since v0.7.0
+				runtimeType: common.AlluxioRuntime,
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnRuntimeDeletedCleanPolicy,
 				},
 			},
@@ -655,9 +648,7 @@ func TestCleanPolicy(t *testing.T) {
 				name:        "default_policy_jindo",
 				namespace:   "default",
 				runtimeType: common.JindoRuntime,
-				// fuse global is set to true since v0.7.0
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnRuntimeDeletedCleanPolicy,
 				},
 			},
@@ -674,9 +665,7 @@ func TestCleanPolicy(t *testing.T) {
 				name:        "on_demand_policy_jindo",
 				namespace:   "default",
 				runtimeType: common.JindoRuntime,
-				// fuse global is set to true since v0.7.0
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnDemandCleanPolicy,
 				},
 			},
@@ -693,9 +682,7 @@ func TestCleanPolicy(t *testing.T) {
 				name:        "on_runtime_deleted_policy_jindo",
 				namespace:   "default",
 				runtimeType: common.JindoRuntime,
-				// fuse global is set to true since v0.7.0
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnRuntimeDeletedCleanPolicy,
 				},
 			},
@@ -712,9 +699,7 @@ func TestCleanPolicy(t *testing.T) {
 				name:        "default_policy_juicefs",
 				namespace:   "default",
 				runtimeType: common.JuiceFSRuntime,
-				// fuse global is set to true since v0.7.0
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnRuntimeDeletedCleanPolicy,
 				},
 			},
@@ -731,9 +716,7 @@ func TestCleanPolicy(t *testing.T) {
 				name:        "on_demand_policy_juicefs",
 				namespace:   "default",
 				runtimeType: common.JuiceFSRuntime,
-				// fuse global is set to true since v0.7.0
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnDemandCleanPolicy,
 				},
 			},
@@ -750,9 +733,7 @@ func TestCleanPolicy(t *testing.T) {
 				name:        "on_runtime_deleted_policy_juicefs",
 				namespace:   "default",
 				runtimeType: common.JuiceFSRuntime,
-				// fuse global is set to true since v0.7.0
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnRuntimeDeletedCleanPolicy,
 				},
 			},
@@ -769,9 +750,7 @@ func TestCleanPolicy(t *testing.T) {
 				name:        "default_policy_goosefs",
 				namespace:   "default",
 				runtimeType: common.GooseFSRuntime,
-				// fuse global is set to true since v0.7.0
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnRuntimeDeletedCleanPolicy,
 				},
 			},
@@ -788,9 +767,7 @@ func TestCleanPolicy(t *testing.T) {
 				name:        "on_demand_policy_goosefs",
 				namespace:   "default",
 				runtimeType: common.GooseFSRuntime,
-				// fuse global is set to true since v0.7.0
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnDemandCleanPolicy,
 				},
 			},
@@ -807,9 +784,7 @@ func TestCleanPolicy(t *testing.T) {
 				name:        "on_runtime_deleted_policy_goosefs",
 				namespace:   "default",
 				runtimeType: common.GooseFSRuntime,
-				// fuse global is set to true since v0.7.0
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnRuntimeDeletedCleanPolicy,
 				},
 			},
@@ -852,7 +827,7 @@ func TestGetRuntimeInfo(t *testing.T) {
 				{
 					Name:      "alluxio",
 					Namespace: "default",
-					Type:      common.ALLUXIO_RUNTIME,
+					Type:      common.AlluxioRuntime,
 				},
 			},
 		},
@@ -925,21 +900,46 @@ func TestGetRuntimeInfo(t *testing.T) {
 			},
 		},
 	}
+
+	efcRuntime := v1alpha1.EFCRuntime{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "efc",
+			Namespace: "default",
+		},
+	}
+	dataEFC := v1alpha1.Dataset{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "efc",
+			Namespace: "default",
+		},
+		Status: v1alpha1.DatasetStatus{
+			Runtimes: []v1alpha1.Runtime{
+				{
+					Name:      "efc",
+					Namespace: "default",
+					Type:      common.EFCRuntime,
+				},
+			},
+		},
+	}
 	s.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.AlluxioRuntime{})
 	s.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.GooseFSRuntime{})
 	s.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.JindoRuntime{})
 	s.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.JuiceFSRuntime{})
+	s.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.EFCRuntime{})
 	s.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.Dataset{})
 	_ = v1.AddToScheme(s)
 	alluxioRuntimeObjs := []runtime.Object{}
 	goosefsRuntimeObjs := []runtime.Object{}
 	jindoRuntimeObjs := []runtime.Object{}
 	juicefsRuntimeObjs := []runtime.Object{}
+	efcRuntimeObjs := []runtime.Object{}
 
 	alluxioRuntimeObjs = append(alluxioRuntimeObjs, &alluxioRuntime, &dataAlluxio)
 	goosefsRuntimeObjs = append(goosefsRuntimeObjs, &goosefsRuntime, &dataGooseFS)
 	jindoRuntimeObjs = append(jindoRuntimeObjs, &jindoRuntime, &dataJindo)
 	juicefsRuntimeObjs = append(juicefsRuntimeObjs, &juicefsRuntime, &dataJuice)
+	efcRuntimeObjs = append(efcRuntimeObjs, &efcRuntime, &dataEFC)
 	type args struct {
 		client    client.Client
 		name      string
@@ -961,10 +961,8 @@ func TestGetRuntimeInfo(t *testing.T) {
 			want: &RuntimeInfo{
 				name:        "alluxio",
 				namespace:   "default",
-				runtimeType: common.ALLUXIO_RUNTIME,
-				// fuse global is set to true since v0.7.0
+				runtimeType: common.AlluxioRuntime,
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnRuntimeDeletedCleanPolicy,
 				},
 			},
@@ -981,9 +979,7 @@ func TestGetRuntimeInfo(t *testing.T) {
 				name:        "goosefs",
 				namespace:   "default",
 				runtimeType: common.GooseFSRuntime,
-				// fuse global is set to true since v0.7.0
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnRuntimeDeletedCleanPolicy,
 				},
 			},
@@ -1000,9 +996,7 @@ func TestGetRuntimeInfo(t *testing.T) {
 				name:        "goosefs-fake",
 				namespace:   "default",
 				runtimeType: common.GooseFSRuntime,
-				// fuse global is set to true since v0.7.0
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnDemandCleanPolicy,
 				},
 			},
@@ -1019,10 +1013,9 @@ func TestGetRuntimeInfo(t *testing.T) {
 				name:        "jindo",
 				namespace:   "default",
 				runtimeType: common.JindoRuntime,
-				// fuse global is set to true since v0.7.0
 				fuse: Fuse{
-					Global:      true,
-					CleanPolicy: v1alpha1.OnRuntimeDeletedCleanPolicy,
+					CleanPolicy:         v1alpha1.OnRuntimeDeletedCleanPolicy,
+					MetricsScrapeTarget: mountModeSelector{},
 				},
 			},
 			wantErr: false,
@@ -1038,9 +1031,7 @@ func TestGetRuntimeInfo(t *testing.T) {
 				name:        "juice",
 				namespace:   "default",
 				runtimeType: common.JuiceFSRuntime,
-				// fuse global is set to true since v0.7.0
 				fuse: Fuse{
-					Global:      true,
 					CleanPolicy: v1alpha1.OnRuntimeDeletedCleanPolicy,
 				},
 			},
@@ -1057,9 +1048,41 @@ func TestGetRuntimeInfo(t *testing.T) {
 				name:        "juice-fake",
 				namespace:   "default",
 				runtimeType: common.JuiceFSRuntime,
-				// fuse global is set to true since v0.7.0
 				fuse: Fuse{
-					Global:      true,
+					CleanPolicy: v1alpha1.OnDemandCleanPolicy,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "efc_test",
+			args: args{
+				client:    fakeutils.NewFakeClientWithScheme(s, efcRuntimeObjs...),
+				name:      "efc",
+				namespace: "default",
+			},
+			want: &RuntimeInfo{
+				name:        "efc",
+				namespace:   "default",
+				runtimeType: common.EFCRuntime,
+				fuse: Fuse{
+					CleanPolicy: v1alpha1.OnRuntimeDeletedCleanPolicy,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "efc_test_err",
+			args: args{
+				client:    fakeutils.NewFakeClientWithScheme(s, efcRuntimeObjs...),
+				name:      "efc-fake",
+				namespace: "default",
+			},
+			want: &RuntimeInfo{
+				name:        "efc-fake",
+				namespace:   "default",
+				runtimeType: common.EFCRuntime,
+				fuse: Fuse{
 					CleanPolicy: v1alpha1.OnDemandCleanPolicy,
 				},
 			},
@@ -1082,7 +1105,227 @@ func TestGetRuntimeInfo(t *testing.T) {
 			}
 
 			if !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetRuntimeInfo() = %#v, want %#v", got, tt.want)
+				t.Errorf("GetRuntimeInfo() = %#v\n, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetRuntimeStatus(t *testing.T) {
+	s := runtime.NewScheme()
+
+	alluxioRuntime := v1alpha1.AlluxioRuntime{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "alluxio",
+			Namespace: "default",
+		},
+	}
+
+	goosefsRuntime := v1alpha1.GooseFSRuntime{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "goosefs",
+			Namespace: "default",
+		},
+	}
+
+	jindoRuntime := v1alpha1.JindoRuntime{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "jindo",
+			Namespace: "default",
+		},
+	}
+
+	juicefsRuntime := v1alpha1.JuiceFSRuntime{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "juice",
+			Namespace: "default",
+		},
+	}
+
+	efcRuntime := v1alpha1.EFCRuntime{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "efc",
+			Namespace: "default",
+		},
+	}
+
+	thinRuntime := v1alpha1.ThinRuntime{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "thin",
+			Namespace: "default",
+		},
+	}
+
+	s.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.AlluxioRuntime{})
+	s.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.GooseFSRuntime{})
+	s.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.JindoRuntime{})
+	s.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.JuiceFSRuntime{})
+	s.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.EFCRuntime{})
+	s.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.ThinRuntime{})
+	s.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.Dataset{})
+
+	_ = v1.AddToScheme(s)
+	alluxioRuntimeObjs := []runtime.Object{}
+	goosefsRuntimeObjs := []runtime.Object{}
+	jindoRuntimeObjs := []runtime.Object{}
+	juicefsRuntimeObjs := []runtime.Object{}
+	efcRuntimeObjs := []runtime.Object{}
+	thinRuntimeObjs := []runtime.Object{}
+
+	alluxioRuntimeObjs = append(alluxioRuntimeObjs, &alluxioRuntime)
+	goosefsRuntimeObjs = append(goosefsRuntimeObjs, &goosefsRuntime)
+	jindoRuntimeObjs = append(jindoRuntimeObjs, &jindoRuntime)
+	juicefsRuntimeObjs = append(juicefsRuntimeObjs, &juicefsRuntime)
+	efcRuntimeObjs = append(efcRuntimeObjs, &efcRuntime)
+	thinRuntimeObjs = append(thinRuntimeObjs, &thinRuntime)
+	type args struct {
+		client      client.Client
+		name        string
+		namespace   string
+		runtimeType string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "alluxio_test",
+			args: args{
+				client:      fakeutils.NewFakeClientWithScheme(s, alluxioRuntimeObjs...),
+				name:        "alluxio",
+				namespace:   "default",
+				runtimeType: common.AlluxioRuntime,
+			},
+			wantErr: false,
+		},
+		{
+			name: "alluxio_test_error",
+			args: args{
+				client:      fakeutils.NewFakeClientWithScheme(s, alluxioRuntimeObjs...),
+				name:        "alluxio-error",
+				namespace:   "default",
+				runtimeType: common.AlluxioRuntime,
+			},
+			wantErr: true,
+		},
+		{
+			name: "goosefs_test",
+			args: args{
+				client:      fakeutils.NewFakeClientWithScheme(s, goosefsRuntimeObjs...),
+				name:        "goosefs",
+				namespace:   "default",
+				runtimeType: common.GooseFSRuntime,
+			},
+			wantErr: false,
+		},
+		{
+			name: "goosefs_test_error",
+			args: args{
+				client:      fakeutils.NewFakeClientWithScheme(s, goosefsRuntimeObjs...),
+				name:        "goosefs-error",
+				namespace:   "default",
+				runtimeType: common.GooseFSRuntime,
+			},
+			wantErr: true,
+		},
+		{
+			name: "jindo_test",
+			args: args{
+				client:      fakeutils.NewFakeClientWithScheme(s, jindoRuntimeObjs...),
+				name:        "jindo",
+				namespace:   "default",
+				runtimeType: common.JindoRuntime,
+			},
+			wantErr: false,
+		},
+		{
+			name: "jindo_test_error",
+			args: args{
+				client:      fakeutils.NewFakeClientWithScheme(s, jindoRuntimeObjs...),
+				name:        "jindo-error",
+				namespace:   "default",
+				runtimeType: common.JindoRuntime,
+			},
+			wantErr: true,
+		},
+		{
+			name: "juicefs_test",
+			args: args{
+				client:      fakeutils.NewFakeClientWithScheme(s, juicefsRuntimeObjs...),
+				name:        "juice",
+				namespace:   "default",
+				runtimeType: common.JuiceFSRuntime,
+			},
+			wantErr: false,
+		},
+		{
+			name: "juicefs_test_error",
+			args: args{
+				client:      fakeutils.NewFakeClientWithScheme(s, juicefsRuntimeObjs...),
+				name:        "juice-error",
+				namespace:   "default",
+				runtimeType: common.JuiceFSRuntime,
+			},
+			wantErr: true,
+		},
+		{
+			name: "efc_test",
+			args: args{
+				client:      fakeutils.NewFakeClientWithScheme(s, efcRuntimeObjs...),
+				name:        "efc",
+				namespace:   "default",
+				runtimeType: common.EFCRuntime,
+			},
+			wantErr: false,
+		},
+		{
+			name: "efc_test_error",
+			args: args{
+				client:      fakeutils.NewFakeClientWithScheme(s, efcRuntimeObjs...),
+				name:        "efc-error",
+				namespace:   "default",
+				runtimeType: common.EFCRuntime,
+			},
+			wantErr: true,
+		},
+		{
+			name: "thin_test",
+			args: args{
+				client:      fakeutils.NewFakeClientWithScheme(s, thinRuntimeObjs...),
+				name:        "thin",
+				namespace:   "default",
+				runtimeType: common.ThinRuntime,
+			},
+			wantErr: false,
+		},
+		{
+			name: "thin_test_error",
+			args: args{
+				client:      fakeutils.NewFakeClientWithScheme(s, thinRuntimeObjs...),
+				name:        "thin-error",
+				namespace:   "default",
+				runtimeType: common.ThinRuntime,
+			},
+			wantErr: true,
+		},
+		{
+			name: "default_error",
+			args: args{
+				client:      fakeutils.NewFakeClientWithScheme(s, thinRuntimeObjs...),
+				name:        "thin-not-exit",
+				namespace:   "default",
+				runtimeType: "thin-not-exit",
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := GetRuntimeStatus(tt.args.client, tt.args.runtimeType, tt.args.name, tt.args.namespace)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetRuntimeInfo() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
 		})
 	}
@@ -1095,13 +1338,13 @@ func TestGetSyncRetryDuration(t *testing.T) {
 		t.Errorf("Failed to getSyncRetryDuration %v", err)
 	}
 
-	os.Setenv(syncRetryDurationEnv, "s")
+	t.Setenv(syncRetryDurationEnv, "s")
 	_, err = getSyncRetryDuration()
 	if err == nil {
 		t.Errorf("Expect to get err, but got nil")
 	}
 
-	os.Setenv(syncRetryDurationEnv, "3s")
+	t.Setenv(syncRetryDurationEnv, "3s")
 	d, err := getSyncRetryDuration()
 	if err != nil {
 		t.Errorf("Failed to getSyncRetryDuration %v", err)
@@ -1119,7 +1362,8 @@ func TestPermitSync(t *testing.T) {
 			Name:      "hbase",
 			Namespace: "fluid",
 		},
-		Log: log.NullLogger{},
+		Log:     fakeutils.NullLogger(),
+		Runtime: &v1alpha1.AlluxioRuntime{},
 	}
 
 	templateEngine := NewTemplateEngine(nil, id, ctx)

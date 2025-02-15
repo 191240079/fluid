@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,13 +17,24 @@ limitations under the License.
 package utils
 
 import (
-	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"strings"
 	"time"
 
+	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+// IgnoreAlreadyExists ignores already existes error
+func IgnoreAlreadyExists(err error) error {
+	if apierrs.IsAlreadyExists(err) {
+		return nil
+	}
+	return err
+}
 
 // IgnoreNotFound ignores not found
 func IgnoreNotFound(err error) error {
@@ -32,8 +44,15 @@ func IgnoreNotFound(err error) error {
 	return err
 }
 
+func IgnoreNoKindMatchError(err error) error {
+	if apimeta.IsNoMatchError(err) {
+		return nil
+	}
+	return err
+}
+
 // NoRequeue returns the result of a reconcile invocation and no err
-// The Object will requeue immediately
+// The Object will not requeue
 func NoRequeue() (ctrl.Result, error) {
 	return RequeueIfError(nil)
 }
@@ -51,7 +70,7 @@ func RequeueImmediately() (ctrl.Result, error) {
 }
 
 // RequeueIfError returns the result of a reconciler invocation and the err
-// The Object will requeue immediately whether the err is nil or not
+// The Object will requeue when err is not nil
 func RequeueIfError(err error) (ctrl.Result, error) {
 	return ctrl.Result{}, err
 }
@@ -93,6 +112,17 @@ func ContainsString(slice []string, s string) bool {
 	return false
 }
 
+// ContainsSubString Determine whether the string array contains a sub string
+// return true if contains the string and return false if not.
+func ContainsSubString(slice []string, s string) bool {
+	for _, item := range slice {
+		if strings.Contains(item, s) {
+			return true
+		}
+	}
+	return false
+}
+
 // ContainsOwners Determine whether the slice of owners contains the owner of a Dataset
 // return true if contains the owner and return false if not.
 func ContainsOwners(owners []metav1.OwnerReference, dataset *datav1alpha1.Dataset) bool {
@@ -100,6 +130,17 @@ func ContainsOwners(owners []metav1.OwnerReference, dataset *datav1alpha1.Datase
 		if owner.UID == dataset.UID {
 			return true
 		}
+	}
+	return false
+}
+
+func ContainsLabel(labels map[string]string, labelKey, labelValue string) bool {
+	value, exit := labels[labelKey]
+	if !exit {
+		return false
+	}
+	if value == labelValue {
+		return true
 	}
 	return false
 }

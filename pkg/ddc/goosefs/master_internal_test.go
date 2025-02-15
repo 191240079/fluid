@@ -1,4 +1,5 @@
 /*
+Copyright 2022 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -12,49 +13,27 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package goosefs
 
 import (
 	"fmt"
+	"testing"
 
 	"github.com/brahma-adshonor/gohook"
-
-	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
-
-	"github.com/fluid-cloudnative/fluid/pkg/ddc/base/portallocator"
-
-	"github.com/fluid-cloudnative/fluid/pkg/utils/helm"
-
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubectl"
-
 	"github.com/pkg/errors"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"k8s.io/apimachinery/pkg/runtime"
-
 	"k8s.io/apimachinery/pkg/util/net"
 
+	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base/portallocator"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
-
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	"testing"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/helm"
 )
 
 func TestSetupMasterInternal(t *testing.T) {
-
-	mockExecCreateConfigMapFromFileCommon := func(name string, key, fileName string, namespace string) (err error) {
-
-		return nil
-
-	}
-
-	mockExecCreateConfigMapFromFileErr := func(name string, key, fileName string, namespace string) (err error) {
-
-		return errors.New("fail to exec command")
-
-	}
 
 	mockExecCheckReleaseCommonFound := func(name string, namespace string) (exist bool, err error) {
 
@@ -83,18 +62,6 @@ func TestSetupMasterInternal(t *testing.T) {
 	mockExecInstallReleaseErr := func(name string, namespace string, valueFile string, chartName string) error {
 
 		return errors.New("fail to install dataload chart")
-
-	}
-
-	wrappedUnhookCreateConfigMapFromFile := func() {
-
-		err := gohook.UnHook(kubectl.CreateConfigMapFromFile)
-
-		if err != nil {
-
-			t.Fatal(err.Error())
-
-		}
 
 	}
 
@@ -157,6 +124,11 @@ func TestSetupMasterInternal(t *testing.T) {
 
 	client := fake.NewFakeClientWithScheme(testScheme, testObjs...)
 
+	runtimeInfo, err := base.BuildRuntimeInfo("hbase", "fluid", "goosefs")
+	if err != nil {
+		t.Errorf("fail to create the runtimeInfo with error %v", err)
+	}
+
 	engine := GooseFSEngine{
 
 		name: "hbase",
@@ -165,7 +137,7 @@ func TestSetupMasterInternal(t *testing.T) {
 
 		Client: client,
 
-		Log: log.NullLogger{},
+		Log: fake.NullLogger(),
 
 		runtime: &datav1alpha1.GooseFSRuntime{
 
@@ -182,36 +154,12 @@ func TestSetupMasterInternal(t *testing.T) {
 				},
 			},
 		},
+		runtimeInfo: runtimeInfo,
 	}
 
-	portallocator.SetupRuntimePortAllocator(client, &net.PortRange{Base: 10, Size: 100}, GetReservedPorts)
-
-	err := gohook.Hook(kubectl.CreateConfigMapFromFile, mockExecCreateConfigMapFromFileErr, nil)
-
+	err = portallocator.SetupRuntimePortAllocator(client, &net.PortRange{Base: 10, Size: 100}, "bitmap", GetReservedPorts)
 	if err != nil {
-
 		t.Fatal(err.Error())
-
-	}
-
-	err = engine.setupMasterInternal()
-
-	if err == nil {
-
-		t.Errorf("fail to catch the error")
-
-	}
-
-	wrappedUnhookCreateConfigMapFromFile()
-
-	// create configmap successfully
-
-	err = gohook.Hook(kubectl.CreateConfigMapFromFile, mockExecCreateConfigMapFromFileCommon, nil)
-
-	if err != nil {
-
-		t.Fatal(err.Error())
-
 	}
 
 	// check release found
@@ -308,36 +256,9 @@ func TestSetupMasterInternal(t *testing.T) {
 
 	wrappedUnhookCheckRelease()
 
-	wrappedUnhookCreateConfigMapFromFile()
-
 }
 
 func TestGenerateGooseFSValueFile(t *testing.T) {
-
-	mockExecCreateConfigMapFromFileCommon := func(name string, key, fileName string, namespace string) (err error) {
-
-		return nil
-
-	}
-
-	mockExecCreateConfigMapFromFileErr := func(name string, key, fileName string, namespace string) (err error) {
-
-		return errors.New("fail to exec command")
-
-	}
-
-	wrappedUnhookCreateConfigMapFromFile := func() {
-
-		err := gohook.UnHook(kubectl.CreateConfigMapFromFile)
-
-		if err != nil {
-
-			t.Fatal(err.Error())
-
-		}
-
-	}
-
 	allixioruntime := &datav1alpha1.GooseFSRuntime{
 
 		ObjectMeta: metav1.ObjectMeta{
@@ -373,6 +294,11 @@ func TestGenerateGooseFSValueFile(t *testing.T) {
 
 	client := fake.NewFakeClientWithScheme(testScheme, testObjs...)
 
+	runtimeInfo, err := base.BuildRuntimeInfo("hbase", "fluid", "goosefs")
+	if err != nil {
+		t.Errorf("fail to create the runtimeInfo with error %v", err)
+	}
+
 	engine := GooseFSEngine{
 
 		name: "hbase",
@@ -381,7 +307,7 @@ func TestGenerateGooseFSValueFile(t *testing.T) {
 
 		Client: client,
 
-		Log: log.NullLogger{},
+		Log: fake.NullLogger(),
 
 		runtime: &datav1alpha1.GooseFSRuntime{
 
@@ -398,34 +324,12 @@ func TestGenerateGooseFSValueFile(t *testing.T) {
 				},
 			},
 		},
+		runtimeInfo: runtimeInfo,
 	}
 
-	portallocator.SetupRuntimePortAllocator(client, &net.PortRange{Base: 10, Size: 50}, GetReservedPorts)
-
-	err := gohook.Hook(kubectl.CreateConfigMapFromFile, mockExecCreateConfigMapFromFileErr, nil)
-
+	err = portallocator.SetupRuntimePortAllocator(client, &net.PortRange{Base: 10, Size: 50}, "bitmap", GetReservedPorts)
 	if err != nil {
-
 		t.Fatal(err.Error())
-
-	}
-
-	_, err = engine.generateGooseFSValueFile(allixioruntime)
-
-	if err == nil {
-
-		t.Errorf("fail to catch the error")
-
-	}
-
-	wrappedUnhookCreateConfigMapFromFile()
-
-	err = gohook.Hook(kubectl.CreateConfigMapFromFile, mockExecCreateConfigMapFromFileCommon, nil)
-
-	if err != nil {
-
-		t.Fatal(err.Error())
-
 	}
 
 	_, err = engine.generateGooseFSValueFile(allixioruntime)
@@ -436,8 +340,6 @@ func TestGenerateGooseFSValueFile(t *testing.T) {
 
 	}
 
-	wrappedUnhookCreateConfigMapFromFile()
-
 }
 
 func TestGetConfigmapName(t *testing.T) {
@@ -446,12 +348,12 @@ func TestGetConfigmapName(t *testing.T) {
 
 		name: "hbase",
 
-		runtimeType: "goosefs",
+		engineImpl: "goosefs",
 	}
 
 	expectedResult := "hbase-goosefs-values"
 
-	if engine.getConfigmapName() != expectedResult {
+	if engine.getHelmValuesConfigMapName() != expectedResult {
 
 		t.Errorf("fail to get the configmap name")
 

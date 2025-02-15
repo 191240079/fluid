@@ -18,19 +18,19 @@ For instance, there are multiple circumstances where you may want to open an iss
 - Have some questions about the project
 - ...
 
-When filing an issue, please make sure all your sensitive data have been excluded. Sensitive data could be password, secret key, network locations, private business data and anything that may do harm to your privacy. 
+When filing an issue, please make sure all your sensitive data has been excluded. Sensitive data could be password, secret key, network locations, private business data and anything that may do harm to your privacy. 
 
 ## Code Contributions
 The Fluid project accepts code contributions via Github pull requests(PR), and this is the only way accepted to apply your changes to the Fluid project.
 
-You should submit a PR If any modifications is going to be applied to the Fluid project, including but not limited to:
+You should submit a PR If any modifications are going to be applied to the Fluid project, including but not limited to:
 - Fix typos
 - Fix bugs
 - Fix or polish documents
 - Prune redundant codes
 - Add comments to codes for readability
 - Add missing test cases
-- Add new features or enhanced some feature
+- Add new features or enhance some feature
 - Refactor codes
 - ...
 
@@ -49,13 +49,13 @@ We assume you've got a Github ID. If then, all you need to do can be summarized 
 
 3. **Set remote upstream**
     ```shell
+    cd fluid
     git remote add upstream https://github.com/fluid-cloudnative/fluid.git
     git remote set-url --push upstream no-pushing
     ```
 
 4. **Update local working directory**
     ```shell
-    cd fluid
     git fetch upstream
     git checkout master
     git rebase upstream/master
@@ -65,6 +65,30 @@ We assume you've got a Github ID. If then, all you need to do can be summarized 
     git checkout -b <new-branch>
     ```
     Develop and make any changes on the `<new-branch>`. For more information about developing Fluid, see [developer guide](docs/en/dev/how_to_develop.md)
+
+### Developer Certificate Of Origin
+
+The Developer Certificate of Origin (DCO) is a lightweight way for contributors to certify that they wrote or otherwise have the right to submit the code they are contributing to the project.
+
+Contributors to the Fluid project sign-off that they adhere to these requirements by adding a Signed-off-by line to commit messages.
+
+```shell
+This is my commit message
+
+Signed-off-by: Random J Developer <random@developer.example.org>
+```
+
+Git even has a -s command line option to append this automatically to your commit message:
+
+```shell
+git commit -s -m 'This is my commit message'
+```
+
+If you have already made a commit and forgot to include the sign-off, you can amend your last commit to add the sign-off with the following command, which can then be force pushed.
+
+```shell
+git commit --amend -s
+```
 
 
 ### Submitting Pull Requests

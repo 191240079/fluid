@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,7 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/fluid-cloudnative/fluid/pkg/common"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -56,18 +57,47 @@ type DataLoadSpec struct {
 
 	// Options specifies the extra dataload properties for runtime
 	Options map[string]string `json:"options,omitempty"`
-}
 
-// DataLoadStatus defines the observed state of DataLoad
-type DataLoadStatus struct {
-	// Phase describes current phase of DataLoad
-	Phase common.Phase `json:"phase"`
+	// PodMetadata defines labels and annotations that will be propagated to DataLoad pods
+	PodMetadata PodMetadata `json:"podMetadata,omitempty"`
 
-	// Conditions consists of transition information on DataLoad's Phase
-	Conditions []Condition `json:"conditions"`
+	// +optional
+	// Affinity defines affinity for DataLoad pod
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
 
-	// Duration tell user how much time was spent to load the data
-	Duration string `json:"duration"`
+	// +optional
+	// Tolerations defines tolerations for DataLoad pod
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+	// +optional
+	// NodeSelector defiens node selector for DataLoad pod
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// +optional
+	// SchedulerName sets the scheduler to be used for DataLoad pod
+	SchedulerName string `json:"schedulerName,omitempty"`
+
+	//+kubebuilder:default:=Once
+	//+kubebuilder:validation:Enum=Once;Cron;OnEvent
+	// including Once, Cron, OnEvent
+	// +optional
+	Policy Policy `json:"policy,omitempty"`
+
+	// The schedule in Cron format, only set when policy is cron, see https://en.wikipedia.org/wiki/Cron.
+	// +optional
+	Schedule string `json:"schedule,omitempty"`
+
+	// Specifies that the preceding operation in a workflow
+	// +optional
+	RunAfter *OperationRef `json:"runAfter,omitempty"`
+
+	// TTLSecondsAfterFinished is the time second to clean up data operations after finished or failed
+	// +optional
+	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
+
+	// Resources that will be requested by the DataLoad job. <br>
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // +kubebuilder:printcolumn:name="Dataset",type="string",JSONPath=`.spec.dataset.name`
@@ -85,8 +115,8 @@ type DataLoad struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   DataLoadSpec   `json:"spec,omitempty"`
-	Status DataLoadStatus `json:"status,omitempty"`
+	Spec   DataLoadSpec    `json:"spec,omitempty"`
+	Status OperationStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

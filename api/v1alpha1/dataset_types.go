@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,10 +17,17 @@ limitations under the License.
 package v1alpha1
 
 import (
-	// "github.com/rook/rook/pkg/apis/rook.io/v1"
-	"github.com/fluid-cloudnative/fluid/pkg/common"
+	"strings"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	// "github.com/rook/rook/pkg/apis/rook.io/v1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
+)
+
+const (
+	Datasetkind = "Dataset"
 )
 
 // DatasetPhase indicates whether the loading is behaving
@@ -36,6 +44,8 @@ const (
 	NotBoundDatasetPhase DatasetPhase = "NotBound"
 	// updating dataset, can't be released
 	UpdatingDatasetPhase DatasetPhase = "Updating"
+	// migrating dataset, can't be mounted
+	DataMigrating DatasetPhase = "DataMigrating"
 	// the dataset have no phase and need to be judged
 	NoneDatasetPhase DatasetPhase = ""
 )
@@ -43,7 +53,7 @@ const (
 type SecretKeySelector struct {
 	// The name of required secret
 	// +required
-	Name string `json:"name,omitempty"`
+	Name string `json:"name"`
 
 	// The required key in the secret
 	// +optional
@@ -58,7 +68,7 @@ type EncryptOptionSource struct {
 type EncryptOption struct {
 	// The name of encryptOption
 	// +required
-	Name string `json:"name,omitempty"`
+	Name string `json:"name"`
 
 	// The valueFrom of encryptOption
 	// +optional
@@ -69,9 +79,9 @@ type EncryptOption struct {
 // Refer to <a href="https://docs.alluxio.io/os/user/stable/en/ufs/S3.html">Alluxio Storage Integrations</a> for more info
 type Mount struct {
 	// MountPoint is the mount point of source.
-	// +kubebuilder:validation:MinLength=10
+	// +kubebuilder:validation:MinLength=5
 	// +required
-	MountPoint string `json:"mountPoint,omitempty"`
+	MountPoint string `json:"mountPoint"`
 
 	// The Mount Options. <br>
 	// Refer to <a href="https://docs.alluxio.io/os/user/stable/en/reference/Properties-List.html">Mount Options</a>.  <br>
@@ -82,7 +92,7 @@ type Mount struct {
 
 	// The name of mount
 	// +kubebuilder:validation:MinLength=0
-	// +required
+	// +optional
 	Name string `json:"name,omitempty"`
 
 	// The path of mount, if not set will be /{Name}
@@ -114,10 +124,12 @@ type DataRestoreLocation struct {
 
 // DatasetSpec defines the desired state of Dataset
 type DatasetSpec struct {
-	// Mount Points to be mounted on Alluxio.
+	// Mount Points to be mounted on cache runtime. <br>
+	// This field can be empty because some runtimes don't need to mount external storage (e.g.
+	// <a href="https://v6d.io/">Vineyard</a>).
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:UniqueItems=false
-	// +required
+	// +optional
 	Mounts []Mount `json:"mounts,omitempty"`
 
 	// The owner of the dataset
@@ -149,6 +161,14 @@ type DatasetSpec struct {
 	// DataRestoreLocation is the location to load data of dataset  been backuped
 	// +optional
 	DataRestoreLocation *DataRestoreLocation `json:"dataRestoreLocation,omitempty"`
+
+	// SharedOptions is the options to all mount
+	// +optional
+	SharedOptions map[string]string `json:"sharedOptions,omitempty"`
+
+	// SharedEncryptOptions is the encryptOption to all mount
+	// +optional
+	SharedEncryptOptions []EncryptOption `json:"sharedEncryptOptions,omitempty"`
 }
 
 // Runtime describes a runtime to be used to support dataset
@@ -199,11 +219,20 @@ type DatasetStatus struct {
 
 	// DataLoadRef specifies the running DataLoad job that targets this Dataset.
 	// This is mainly used as a lock to prevent concurrent DataLoad jobs.
+	// Deprecated, use OperationRef instead
 	DataLoadRef string `json:"dataLoadRef,omitempty"`
 
 	// DataBackupRef specifies the running Backup job that targets this Dataset.
 	// This is mainly used as a lock to prevent concurrent DataBackup jobs.
+	// Deprecated, use OperationRef instead
 	DataBackupRef string `json:"dataBackupRef,omitempty"`
+
+	// OperationRef specifies the Operation that targets this Dataset.
+	// This is mainly used as a lock to prevent concurrent same Operation jobs.
+	OperationRef map[string]string `json:"operationRef,omitempty"`
+
+	// DatasetRef specifies the datasets namespaced name mounting this Dataset.
+	DatasetRef []string `json:"datasetRef,omitempty"`
 }
 
 // DatasetConditionType defines all kinds of types of cacheStatus.<br>
@@ -217,6 +246,9 @@ const (
 
 	// DatasetReady means the cache system for the dataset is ready.
 	DatasetReady DatasetConditionType = "Ready"
+
+	// DatasetNotReady means the dataset is not bound due to some unexpected error
+	DatasetNotReady DatasetConditionType = "NotReady"
 
 	// DatasetUpdateReady means the cache system for the dataset is updated.
 	DatasetUpdateReady DatasetConditionType = "UpdateReady"
@@ -308,4 +340,55 @@ func (dataset *Dataset) CanbeBound(name string, namespace string, category commo
 
 func (dataset *Dataset) IsExclusiveMode() bool {
 	return dataset.Spec.PlacementMode == DefaultMode || dataset.Spec.PlacementMode == ExclusiveMode
+}
+
+// GetDataOperationInProgress get the name of operation for certain type running on this dataset, otherwise return empty string
+func (dataset *Dataset) GetDataOperationInProgress(operationType string) string {
+	if dataset.Status.OperationRef == nil {
+		return ""
+	}
+
+	return dataset.Status.OperationRef[operationType]
+}
+
+// SetDataOperationInProgress set the data operation running on this dataset,
+func (dataset *Dataset) SetDataOperationInProgress(operationType string, name string) {
+	if dataset.Status.OperationRef == nil {
+		dataset.Status.OperationRef = map[string]string{
+			operationType: name,
+		}
+		return
+	}
+	if dataset.Status.OperationRef[operationType] == "" {
+		dataset.Status.OperationRef[operationType] = name
+		return
+	}
+	opRefs := strings.Split(dataset.Status.OperationRef[operationType], ",")
+	for _, opRef := range opRefs {
+		if opRef == name {
+			return
+		}
+	}
+
+	dataset.Status.OperationRef[operationType] = dataset.Status.OperationRef[operationType] + "," + name
+}
+
+// RemoveDataOperationInProgress release Dataset for operation
+func (dataset *Dataset) RemoveDataOperationInProgress(operationType, name string) string {
+	if dataset.Status.OperationRef == nil {
+		return ""
+	}
+	dataOpKeys := strings.Split(dataset.Status.OperationRef[operationType], ",")
+	if len(dataOpKeys) == 1 && dataOpKeys[0] == name {
+		delete(dataset.Status.OperationRef, operationType)
+		return ""
+	}
+	for i, key := range dataOpKeys {
+		if key == name {
+			dataOpKeys = append(dataOpKeys[:i], dataOpKeys[i+1:]...)
+			break
+		}
+	}
+	dataset.Status.OperationRef[operationType] = strings.Join(dataOpKeys, ",")
+	return dataset.Status.OperationRef[operationType]
 }

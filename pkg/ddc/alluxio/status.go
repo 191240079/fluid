@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -57,6 +58,8 @@ func (e *AlluxioEngine) CheckAndUpdateRuntimeStatus() (ready bool, err error) {
 		return ready, err
 	}
 
+	var workerNodeAffinity = kubeclient.MergeNodeSelectorAndNodeAffinity(workers.Spec.Template.Spec.NodeSelector, workers.Spec.Template.Spec.Affinity)
+
 	err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		runtime, err := e.getRuntime()
 		if err != nil {
@@ -74,6 +77,9 @@ func (e *AlluxioEngine) CheckAndUpdateRuntimeStatus() (ready bool, err error) {
 		if len(runtime.Status.CacheStates) == 0 {
 			runtimeToUpdate.Status.CacheStates = map[common.CacheStateName]string{}
 		}
+
+		// set node affinity
+		runtimeToUpdate.Status.CacheAffinity = workerNodeAffinity
 
 		runtimeToUpdate.Status.CacheStates[common.CacheCapacity] = states.cacheCapacity
 		runtimeToUpdate.Status.CacheStates[common.CachedPercentage] = states.cachedPercentage
@@ -100,7 +106,10 @@ func (e *AlluxioEngine) CheckAndUpdateRuntimeStatus() (ready bool, err error) {
 		runtimeToUpdate.Status.WorkerNumberReady = int32(workers.Status.ReadyReplicas)
 		runtimeToUpdate.Status.WorkerNumberUnavailable = int32(*workers.Spec.Replicas - workers.Status.ReadyReplicas)
 		runtimeToUpdate.Status.WorkerNumberAvailable = int32(workers.Status.CurrentReplicas)
-		if workers.Status.ReadyReplicas > 0 {
+		if runtime.Replicas() == 0 {
+			runtimeToUpdate.Status.WorkerPhase = data.RuntimePhaseReady
+			workerReady = true
+		} else if workers.Status.ReadyReplicas > 0 {
 			if runtime.Replicas() == workers.Status.ReadyReplicas {
 				runtimeToUpdate.Status.WorkerPhase = data.RuntimePhaseReady
 				workerReady = true

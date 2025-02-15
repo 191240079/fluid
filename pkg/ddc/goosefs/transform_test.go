@@ -1,4 +1,5 @@
 /*
+Copyright 2022 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,6 +20,8 @@ import (
 	"testing"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
+	fakeutils "github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
@@ -54,9 +57,16 @@ func TestTransformFuse(t *testing.T) {
 		}, &GooseFS{}, []string{"fuse", "--fuse-opts=rw,direct_io,uid=1000,gid=1000,allow_other"}},
 	}
 	for _, test := range tests {
-		engine := &GooseFSEngine{}
+		runtimeInfo, err := base.BuildRuntimeInfo("test", "fluid", "goosefs")
+		if err != nil {
+			t.Errorf("fail to create the runtimeInfo with error %v", err)
+		}
+		engine := &GooseFSEngine{
+			runtimeInfo: runtimeInfo,
+			Client:      fakeutils.NewFakeClientWithScheme(testScheme),
+		}
 		engine.Log = ctrl.Log
-		err := engine.transformFuse(test.runtime, test.dataset, test.value)
+		err = engine.transformFuse(test.runtime, test.dataset, test.value)
 		if err != nil {
 			t.Errorf("error %v", err)
 		}

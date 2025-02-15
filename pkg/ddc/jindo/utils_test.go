@@ -17,13 +17,14 @@ limitations under the License.
 package jindo
 
 import (
-	"github.com/go-logr/logr"
 	"os"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"testing"
+
+	"github.com/go-logr/logr"
 
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 )
 
 func TestIsFluidNativeScheme(t *testing.T) {
@@ -58,7 +59,7 @@ func TestMountRootWithEnvSet(t *testing.T) {
 		{"/var/lib/mymount", "/var/lib/mymount/jindo"},
 	}
 	for _, tc := range testCases {
-		os.Setenv(utils.MountRoot, tc.input)
+		t.Setenv(utils.MountRoot, tc.input)
 		if tc.expected != getMountRoot() {
 			t.Errorf("expected %#v, got %#v",
 				tc.expected, getMountRoot())
@@ -100,7 +101,7 @@ func TestJindoFSEngine_getHostMountPoint(t *testing.T) {
 			fields: fields{
 				name:      "jindofs",
 				namespace: "default",
-				Log:       log.NullLogger{},
+				Log:       fake.NullLogger(),
 				MountRoot: "/tmp",
 			},
 			wantMountPath: "/tmp/jindo/default/jindofs",
@@ -113,7 +114,7 @@ func TestJindoFSEngine_getHostMountPoint(t *testing.T) {
 				namespace: tt.fields.namespace,
 				Log:       tt.fields.Log,
 			}
-			os.Setenv("MOUNT_ROOT", tt.fields.MountRoot)
+			t.Setenv("MOUNT_ROOT", tt.fields.MountRoot)
 			if gotMountPath := j.getHostMountPoint(); gotMountPath != tt.wantMountPath {
 				t.Errorf("getHostMountPoint() = %v, want %v", gotMountPath, tt.wantMountPath)
 			}

@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Author.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,14 +17,17 @@ limitations under the License.
 package v1alpha1
 
 const (
-	// The cache system are ready
+	// The cache system is ready
 	DatasetReadyReason = "DatasetReady"
 
-	// The cache system are updating
+	// The cache system is updating
 	DatasetUpdatingReason = "DatasetUpdating"
 
-	// Resynced means updating with the underlayer filesystem.
+	// The cache system is failing
 	DatasetDataSetFailedReason = "DatasetFailed"
+
+	// The cache system fails to bind
+	DatasetFailedToSetupReason = "DatasetFailedToSetup"
 )
 
 type PlacementMode string
@@ -35,17 +39,6 @@ const (
 
 	// DefaultMode is exclusive
 	DefaultMode PlacementMode = ""
-)
-
-type NetworkMode string
-
-const (
-	HostNetworkMode NetworkMode = "HostNetwork"
-
-	ContainerNetworkMode NetworkMode = "ContainerNetwork"
-
-	// DefaultMode is Host
-	DefaultNetworkMode NetworkMode = ""
 )
 
 type FuseCleanPolicy string

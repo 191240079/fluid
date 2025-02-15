@@ -1,20 +1,37 @@
+/*
+Copyright 2023 The Fluid Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package docker
 
 import (
 	"fmt"
-	"github.com/fluid-cloudnative/fluid/pkg/common"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 	"os"
 	"regexp"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/fluid-cloudnative/fluid/pkg/common"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 )
 
 const ImageTagEnvRegexFormat = "^\\S+:\\S+$"
 
-var (
-	ImageTagEnvRegex = regexp.MustCompile(ImageTagEnvRegexFormat)
-)
+var ImageTagEnvRegex = regexp.MustCompile(ImageTagEnvRegexFormat)
 
 // ParseDockerImage extracts repo and tag from image. An empty string is returned if no tag is discovered.
 func ParseDockerImage(image string) (name string, tag string) {
@@ -54,6 +71,23 @@ func GetImageTagFromEnv(envName string) (tag string) {
 		}
 	}
 	return
+}
+
+// get docker pull secrets from environment variables, if it's not existed, return []
+// image pull secret format in ENV: str1,str2,str3
+func GetImagePullSecretsFromEnv(envName string) []corev1.LocalObjectReference {
+	imagePullSecrets := []corev1.LocalObjectReference{}
+	if value, existed := os.LookupEnv(envName); existed {
+		if len(value) > 0 {
+			secrets := strings.Split(value, ",")
+			for _, item := range secrets {
+				if len(item) > 0 {
+					imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: item})
+				}
+			}
+		}
+	}
+	return imagePullSecrets
 }
 
 // ParseInitImage parses the init image and image tag

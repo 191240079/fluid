@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Fluid Authors.
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ package alluxio
 import (
 	"testing"
 
-	"github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	ctrlhelper "github.com/fluid-cloudnative/fluid/pkg/ctrl"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
@@ -28,7 +28,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	utilpointer "k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -36,7 +36,7 @@ func TestSetupWorkers(t *testing.T) {
 
 	// runtimeInfoSpark tests create worker in exclusive mode.
 
-	runtimeInfoSpark, err := base.BuildRuntimeInfo("spark", "big-data", "alluxio", datav1alpha1.TieredStore{})
+	runtimeInfoSpark, err := base.BuildRuntimeInfo("spark", "big-data", common.AlluxioRuntime)
 
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
@@ -46,7 +46,7 @@ func TestSetupWorkers(t *testing.T) {
 	})
 
 	// runtimeInfoSpark tests create worker in shareMode mode.
-	runtimeInfoHadoop, err := base.BuildRuntimeInfo("hadoop", "big-data", "alluxio", datav1alpha1.TieredStore{})
+	runtimeInfoHadoop, err := base.BuildRuntimeInfo("hadoop", "big-data", common.AlluxioRuntime)
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
 	}
@@ -56,7 +56,7 @@ func TestSetupWorkers(t *testing.T) {
 	nodeSelector := map[string]string{
 		"node-select": "true",
 	}
-	runtimeInfoHadoop.SetupFuseDeployMode(true, nodeSelector)
+	runtimeInfoHadoop.SetFuseNodeSelector(nodeSelector)
 
 	type fields struct {
 		replicas         int32
@@ -92,7 +92,7 @@ func TestSetupWorkers(t *testing.T) {
 						Namespace: "big-data",
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: utilpointer.Int32Ptr(1),
+						Replicas: ptr.To[int32](1),
 					},
 				},
 				runtime: &datav1alpha1.AlluxioRuntime{
@@ -128,7 +128,7 @@ func TestSetupWorkers(t *testing.T) {
 						Namespace: "big-data",
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: utilpointer.Int32Ptr(1),
+						Replicas: ptr.To[int32](1),
 					},
 				},
 				runtime: &datav1alpha1.AlluxioRuntime{
@@ -196,7 +196,7 @@ func TestSetupWorkers(t *testing.T) {
 			runtimeObjs = append(runtimeObjs, tt.fields.worker.DeepCopy())
 
 			s := runtime.NewScheme()
-			data := &v1alpha1.Dataset{
+			data := &datav1alpha1.Dataset{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      tt.fields.name,
 					Namespace: tt.fields.namespace,
@@ -328,7 +328,7 @@ func TestShouldSetupWorkers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			runtimeObjs := []runtime.Object{}
-			data := &v1alpha1.Dataset{
+			data := &datav1alpha1.Dataset{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      tt.fields.name,
 					Namespace: tt.fields.namespace,
@@ -386,9 +386,7 @@ func TestCheckWorkersReady(t *testing.T) {
 					},
 					Spec: datav1alpha1.AlluxioRuntimeSpec{
 						Replicas: 1,
-						Fuse: datav1alpha1.AlluxioFuseSpec{
-							Global: true,
-						},
+						Fuse:     datav1alpha1.AlluxioFuseSpec{},
 					},
 				},
 				worker: &appsv1.StatefulSet{
@@ -427,9 +425,7 @@ func TestCheckWorkersReady(t *testing.T) {
 					},
 					Spec: datav1alpha1.AlluxioRuntimeSpec{
 						Replicas: 1,
-						Fuse: datav1alpha1.AlluxioFuseSpec{
-							Global: true,
-						},
+						Fuse:     datav1alpha1.AlluxioFuseSpec{},
 					},
 				},
 				worker: &appsv1.StatefulSet{
@@ -467,9 +463,7 @@ func TestCheckWorkersReady(t *testing.T) {
 					},
 					Spec: datav1alpha1.AlluxioRuntimeSpec{
 						Replicas: 1,
-						Fuse: datav1alpha1.AlluxioFuseSpec{
-							Global: true,
-						},
+						Fuse:     datav1alpha1.AlluxioFuseSpec{},
 					},
 				},
 				worker: &appsv1.StatefulSet{
@@ -500,7 +494,7 @@ func TestCheckWorkersReady(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			runtimeObjs := []runtime.Object{}
-			data := &v1alpha1.Dataset{
+			data := &datav1alpha1.Dataset{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      tt.fields.name,
 					Namespace: tt.fields.namespace,
@@ -524,7 +518,7 @@ func TestCheckWorkersReady(t *testing.T) {
 				Log:       ctrl.Log.WithName(tt.fields.name),
 			}
 
-			runtimeInfo, err := base.BuildRuntimeInfo(tt.fields.name, tt.fields.namespace, "alluxio", datav1alpha1.TieredStore{})
+			runtimeInfo, err := base.BuildRuntimeInfo(tt.fields.name, tt.fields.namespace, common.AlluxioRuntime)
 			if err != nil {
 				t.Errorf("AlluxioEngine.CheckWorkersReady() error = %v", err)
 			}

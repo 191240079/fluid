@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Fluid Authors.
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,18 +21,31 @@ limitations under the License.
 package base
 
 import (
+	dataoperation "github.com/fluid-cloudnative/fluid/pkg/dataoperation"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
+	"github.com/golang/mock/gomock"
 	reflect "reflect"
+	ctrl "sigs.k8s.io/controller-runtime"
 
-	v1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
-	runtime "github.com/fluid-cloudnative/fluid/pkg/runtime"
-	utils "github.com/fluid-cloudnative/fluid/pkg/utils"
-	gomock "github.com/golang/mock/gomock"
+	"github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/runtime"
+	"github.com/fluid-cloudnative/fluid/pkg/utils"
 )
+
+var _ base.Engine = (*MockEngine)(nil)
 
 // MockEngine is a mock of Engine interface.
 type MockEngine struct {
 	ctrl     *gomock.Controller
 	recorder *MockEngineMockRecorder
+}
+
+func (m *MockEngine) Operate(ctx runtime.ReconcileRequestContext, opStatus *v1alpha1.OperationStatus, operation dataoperation.OperationInterface) (ctrl.Result, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Operate", ctx, opStatus, operation)
+	ret0, _ := ret[0].(ctrl.Result)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // MockEngineMockRecorder is the mock recorder for MockEngine.
@@ -123,18 +136,8 @@ func (mr *MockEngineMockRecorder) ID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ID", reflect.TypeOf((*MockEngine)(nil).ID))
 }
 
-// LoadData mocks base method.
-func (m *MockEngine) LoadData(ctx runtime.ReconcileRequestContext, targetDataload v1alpha1.DataLoad) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LoadData", ctx, targetDataload)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// LoadData indicates an expected call of LoadData.
-func (mr *MockEngineMockRecorder) LoadData(ctx, targetDataload interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadData", reflect.TypeOf((*MockEngine)(nil).LoadData), ctx, targetDataload)
+func (m *MockEngine) Validate(ctx runtime.ReconcileRequestContext) (err error) {
+	return nil
 }
 
 // Setup mocks base method.
@@ -232,21 +235,7 @@ func (mr *MockDataloaderMockRecorder) CheckRuntimeReady() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckRuntimeReady", reflect.TypeOf((*MockDataloader)(nil).CheckRuntimeReady))
 }
 
-// LoadData mocks base method.
-func (m *MockDataloader) LoadData(ctx runtime.ReconcileRequestContext, targetDataload v1alpha1.DataLoad) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LoadData", ctx, targetDataload)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// LoadData indicates an expected call of LoadData.
-func (mr *MockDataloaderMockRecorder) LoadData(ctx, targetDataload interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadData", reflect.TypeOf((*MockDataloader)(nil).LoadData), ctx, targetDataload)
-}
-
-// MockImplement is a mock of Implement interface.
+// MockImplement is a mock of implement interface.
 type MockImplement struct {
 	ctrl     *gomock.Controller
 	recorder *MockImplementMockRecorder
@@ -386,18 +375,12 @@ func (mr *MockImplementMockRecorder) CheckWorkersReady() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckWorkersReady", reflect.TypeOf((*MockImplement)(nil).CheckWorkersReady))
 }
 
-// CreateDataLoadJob mocks base method.
-func (m *MockImplement) CreateDataLoadJob(ctx runtime.ReconcileRequestContext, targetDataload v1alpha1.DataLoad) error {
+func (m *MockImplement) GetDataOperationValueFile(ctx runtime.ReconcileRequestContext, operation dataoperation.OperationInterface) (valueFileName string, err error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateDataLoadJob", ctx, targetDataload)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CreateDataLoadJob indicates an expected call of CreateDataLoadJob.
-func (mr *MockImplementMockRecorder) CreateDataLoadJob(ctx, targetDataload interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDataLoadJob", reflect.TypeOf((*MockImplement)(nil).CreateDataLoadJob), ctx, targetDataload)
+	ret := m.ctrl.Call(m, "GetDataOperationValueFile", ctx, operation)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // CreateVolume mocks base method.
@@ -586,6 +569,21 @@ func (mr *MockImplementMockRecorder) SyncReplicas(ctx interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicas", reflect.TypeOf((*MockImplement)(nil).SyncReplicas), ctx)
 }
 
+// SyncRuntime mocks base method.
+func (m *MockImplement) SyncRuntime(ctx runtime.ReconcileRequestContext) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncRuntime", ctx)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncRuntime indicates an expected call of SyncRuntime.
+func (mr *MockImplementMockRecorder) SyncRuntime(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncRuntime", reflect.TypeOf((*MockImplement)(nil).SyncRuntime), ctx)
+}
+
 // SyncScheduleInfoToCacheNodes mocks base method.
 func (m *MockImplement) SyncScheduleInfoToCacheNodes() error {
 	m.ctrl.T.Helper()
@@ -686,6 +684,10 @@ func (m *MockImplement) UsedStorageBytes() (int64, error) {
 func (mr *MockImplementMockRecorder) UsedStorageBytes() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UsedStorageBytes", reflect.TypeOf((*MockImplement)(nil).UsedStorageBytes))
+}
+
+func (m *MockImplement) Validate(ctx runtime.ReconcileRequestContext) (err error) {
+	return nil
 }
 
 // MockUnderFileSystemService is a mock of UnderFileSystemService interface.

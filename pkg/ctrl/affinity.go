@@ -17,9 +17,8 @@ limitations under the License.
 package ctrl
 
 import (
-	"context"
-
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -125,6 +124,13 @@ func (e *Helper) BuildWorkersAffinity(workers *appsv1.StatefulSet) (workersToUpd
 					},
 				},
 			}
+
+			// TODO: remove this when EFC is ready for spread-first scheduling policy
+			// Currently EFC prefers binpack-first scheduling policy to spread-first scheduling policy. Set PreferredDuringSchedulingIgnoredDuringExecution to empty
+			// to avoid using spread-first scheduling policy
+			if e.runtimeInfo.GetRuntimeType() == common.EFCRuntime {
+				workersToUpdate.Spec.Template.Spec.Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution = []corev1.WeightedPodAffinityTerm{}
+			}
 		}
 
 		// 3. Prefer to locate on the node which already has fuse on it
@@ -158,12 +164,6 @@ func (e *Helper) BuildWorkersAffinity(workers *appsv1.StatefulSet) (workersToUpd
 					dataset.Spec.NodeAffinity.Required
 			}
 		}
-
-		err = e.client.Update(context.TODO(), workersToUpdate)
-		if err != nil {
-			return workersToUpdate, err
-		}
-
 	}
 
 	return

@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,8 +17,9 @@ limitations under the License.
 package utils
 
 import (
-	"os"
 	"testing"
+
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 )
 
 func TestGetEnvByKey(t *testing.T) {
@@ -30,20 +32,20 @@ func TestGetEnvByKey(t *testing.T) {
 		"test get env value by key case 1": {
 			key:       "MY_POD_NAMESPACE",
 			envKey:    "MY_POD_NAMESPACE",
-			value:     "fluid-system",
-			wantValue: "fluid-system",
+			value:     common.NamespaceFluidSystem,
+			wantValue: common.NamespaceFluidSystem,
 		},
 		"test get env value by key case 2": {
 			key:       "MY_POD_NAMESPACE",
 			envKey:    "MY_POD_NAMESPACES",
-			value:     "fluid-system",
+			value:     common.NamespaceFluidSystem,
 			wantValue: "",
 		},
 	}
 
 	for k, item := range testCases {
 		// prepare env value
-		os.Setenv(item.key, item.value)
+		t.Setenv(item.key, item.value)
 		gotValue, _ := GetEnvByKey(item.envKey)
 		if gotValue != item.wantValue {
 			t.Errorf("%s check failure, want:%v,got:%v", k, item.wantValue, gotValue)

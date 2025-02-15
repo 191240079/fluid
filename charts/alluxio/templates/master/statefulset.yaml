@@ -16,7 +16,6 @@
 {{- $isUfsLocal := and (eq .Values.journal.type "UFS") (eq .Values.journal.ufsType "local") }}
 {{- $needJournalVolume := or $isEmbedded $isUfsLocal }}
 {{- $hostNetwork := .Values.master.hostNetwork }}
-{{- $hostPID := .Values.master.hostPID }}
 {{- $name := include "alluxio.name" . }}
 {{- $fullName := include "alluxio.fullname" . }}
 {{- $chart := include "alluxio.chart" . }}
@@ -32,6 +31,16 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
     role: alluxio-master
+    {{- include "library.fluid.labels" . | nindent 4 }}
+  ownerReferences:
+  {{- if .Values.owner.enabled }}
+  - apiVersion: {{ .Values.owner.apiVersion }}
+    blockOwnerDeletion: {{ .Values.owner.blockOwnerDeletion }}
+    controller: {{ .Values.owner.controller }}
+    kind: {{ .Values.owner.kind }}
+    name: {{ .Values.owner.name }}
+    uid: {{ .Values.owner.uid }}
+  {{- end }}
 spec:
   selector:
     matchLabels:
@@ -40,28 +49,49 @@ spec:
       name: {{ $fullName }}-master
   serviceName: {{ $fullName }}-master
   replicas: {{ $masterCount }}
+  podManagementPolicy: {{ .Values.master.podManagementPolicy }}
   template:
     metadata:
+      annotations:
+        sidecar.istio.io/inject: "false"
+      {{- if .Values.master.annotations }}
+      {{- range $key, $val := .Values.master.annotations }}
+        {{ $key | quote }}: {{ $val | quote }}
+      {{- end }}
+      {{- end }}
       labels:
+        sidecar.istio.io/inject: "false"
         name: {{ $fullName }}-master
         app: {{ $name }}
         chart: {{ $chart }}
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
         role: alluxio-master
+        {{- include "library.fluid.labels" . | nindent 8 }}
+        {{- if .Values.master.labels }}
+        {{- range $key, $val := .Values.master.labels }}
+        {{ $key | quote }}: {{ $val | quote }}
+        {{- end }}
+        {{- end }}
     spec:
+      {{- if .Values.master.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.master.imagePullSecrets | nindent 8 }}
+      {{- else if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
       enableServiceLinks: false
+      {{- if .Values.master.hostNetwork }}
       hostNetwork: {{ $hostNetwork }}
-      hostPID: {{ .Values.master.hostPID }}
-      dnsPolicy: {{ .Values.master.dnsPolicy | default ($hostNetwork | ternary "ClusterFirstWithHostNet" "ClusterFirst") }}
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
       nodeSelector:
       {{- if .Values.master.nodeSelector }}
 {{ toYaml .Values.master.nodeSelector | trim | indent 8  }}
       {{- else if .Values.nodeSelector }}
 {{ toYaml .Values.nodeSelector | trim | indent 8  }}
       {{- end }}
-      securityContext:
-        fsGroup: {{ .Values.fsGroup }}
       {{- if .Values.tolerations }}
       tolerations:
 {{ toYaml .Values.tolerations | indent 8 }}
@@ -148,10 +178,31 @@ spec:
           {{- if .Values.master.resources  }}
 {{ include "alluxio.master.resources" . | indent 10 }}
           {{- end }}
+          {{- if eq .Values.master.mountConfigStorage "configmap"}}
+          command: ["/etc/fluid/scripts/entrypoint.sh"]
+          {{ else }}
           command: ["/entrypoint.sh"]
+          {{- end }}
           {{- if .Values.master.args }}
           args:
 {{ toYaml .Values.master.args | trim | indent 12 }}
+          {{- end }}
+          # Ha Master mode will connect to each other to get ready, so can not use probe, use controller to mount.
+          {{- if and (eq .Values.master.mountConfigStorage "configmap") ($isSingleMaster) }}
+          {{- if semverCompare ">=1.18.0-0" .Capabilities.KubeVersion.Version }}
+          startupProbe:
+            exec:
+              command: ["bash", "-c", "/etc/fluid/scripts/mount.sh >> /proc/1/fd/1 2>&1"]
+            initialDelaySeconds: 5
+            failureThreshold: 10
+            timeoutSeconds: 15
+            periodSeconds: 20
+          {{- else }}
+          lifecycle:
+            postStart:
+              exec:
+                command: ["bash", "-c", "while true; do /etc/fluid/scripts/mount.sh >> /proc/1/fd/1 2>&1; if [ $? -ne 0 ];then sleep 20; else break; fi; done" ]
+          {{- end }}
           {{- end }}
           {{- if $isHaEmbedded }}
           env:
@@ -192,10 +243,6 @@ spec:
             mountPath: /host
         {{- end }}
         {{- end }}
-          {{- if .Values.master.backupPath }}
-          - name: backup
-            mountPath: /alluxio_backups
-          {{- end }}
           {{- if .Values.hadoopConfig }}
           {{- if or .Values.hadoopConfig.includeCoreSite .Values.hadoopConfig.includeHdfsSite }}
           - name: hdfs-confs
@@ -225,6 +272,9 @@ spec:
             {{- range .Values.ufsVolumes }}
           - mountPath: {{ .containerPath }}
             name: {{ .name }}
+            {{- if .subPath }}
+            subPath: {{ .subPath }}
+            {{- end }}
             {{- end }}
           {{- end }}
           {{- if .Values.metastore }}
@@ -241,6 +291,13 @@ spec:
           - name: "{{ .name }}"
             mountPath: "{{ .path }}"
             {{- end }}
+          {{- end }}
+          {{- if .Values.master.volumeMounts }}
+{{ toYaml .Values.master.volumeMounts | indent 10 }}
+          {{- end }}
+          {{- if eq .Values.master.mountConfigStorage "configmap"}}
+          - mountPath: /etc/fluid/scripts
+            name: alluxio-mount-conf
           {{- end }}
         - name: alluxio-job-master
           image: {{ .Values.image }}:{{ .Values.imageTag }}
@@ -316,6 +373,9 @@ spec:
             {{- range .Values.ufsVolumes }}
           - mountPath: {{ .containerPath }}
             name: {{ .name }}
+            {{- if .subPath }}
+            subPath: {{ .subPath }}
+            {{- end }}
             {{- end }}
           {{- end }}
           {{- if .Values.mounts }}
@@ -324,8 +384,26 @@ spec:
             mountPath: "{{ .path }}"
             {{- end }}
           {{- end }}
+          {{- if .Values.master.volumeMounts }}
+{{ toYaml .Values.master.volumeMounts | indent 10 }}
+          {{- end }}
       restartPolicy: Always
       volumes:
+        {{- if eq .Values.master.mountConfigStorage "configmap"}}
+        - name: alluxio-mount-conf
+          configMap:
+            name: {{ template "alluxio.fullname" . }}-mount-config
+            items:
+              - key: entrypoint.script
+                path: entrypoint.sh
+                mode: 0550
+              - key: mount.script
+                path: mount.sh
+                mode: 0550
+              - key: mount.info
+                path: mount.info
+                mode: 0444
+        {{- end }}
         {{ if .Values.master.restore.enabled -}}
         {{- if .Values.master.restore.pvcName }}
         - name: pvc
@@ -337,12 +415,6 @@ spec:
             path: {{ .Values.master.restore.path }}
             type: DirectoryOrCreate
         {{- end }}
-        {{- end }}
-        {{- if .Values.master.backupPath }}
-        - name: backup
-          hostPath:
-            path: {{ .Values.master.backupPath }}
-            type: DirectoryOrCreate
         {{- end }}
         {{- if .Values.hadoopConfig }}
         {{- if or .Values.hadoopConfig.includeCoreSite .Values.hadoopConfig.includeHdfsSite }}
@@ -419,6 +491,9 @@ spec:
           persistentVolumeClaim:
             claimName: "{{ .name }}"
           {{- end }}
+        {{- end }}
+        {{- if .Values.master.volumes }}   
+{{ toYaml .Values.master.volumes | indent 8 }}
         {{- end }}
   volumeClaimTemplates:
   {{- if and $needJournalVolume (eq .Values.journal.volumeType "persistentVolumeClaim") }}

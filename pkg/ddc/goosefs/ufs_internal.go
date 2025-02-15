@@ -26,6 +26,7 @@ import (
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/goosefs/operations"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
+	securityutil "github.com/fluid-cloudnative/fluid/pkg/utils/security"
 	"github.com/pkg/errors"
 )
 
@@ -64,10 +65,10 @@ func (e *GooseFSEngine) totalFileNumsInternal() (fileCount int64, err error) {
 // shouldMountUFS checks if there's any UFS that need to be mounted
 func (e *GooseFSEngine) shouldMountUFS() (should bool, err error) {
 	dataset, err := utils.GetDataset(e.Client, e.name, e.namespace)
-	e.Log.Info("get dataset info", "dataset", dataset)
 	if err != nil {
 		return should, err
 	}
+	e.Log.Info("get dataset info", "dataset", dataset)
 
 	podName, containerName := e.getMasterPodInfo()
 	fileUtils := operations.NewGooseFSFileUtils(podName, containerName, e.namespace, e.Log)
@@ -85,7 +86,7 @@ func (e *GooseFSEngine) shouldMountUFS() (should bool, err error) {
 			// No need for a mount point with Fluid native scheme('local://' and 'pvc://') to be mounted
 			continue
 		}
-		goosefsPath := utils.UFSPathBuilder{}.GenAlluxioMountPath(mount, dataset.Spec.Mounts)
+		goosefsPath := utils.UFSPathBuilder{}.GenUFSPathInUnifiedNamespace(mount)
 		mounted, err := fileUtils.IsMounted(goosefsPath)
 		if err != nil {
 			should = false
@@ -125,7 +126,7 @@ func (e *GooseFSEngine) getMounts() (resultInCtx []string, resultHaveMounted []s
 			// No need for a mount point with Fluid native scheme('local://' and 'pvc://') to be mounted
 			continue
 		}
-		goosefsPathInCtx := utils.UFSPathBuilder{}.GenAlluxioMountPath(mount, dataset.Spec.Mounts)
+		goosefsPathInCtx := utils.UFSPathBuilder{}.GenUFSPathInUnifiedNamespace(mount)
 		resultInCtx = append(resultInCtx, goosefsPathInCtx)
 	}
 
@@ -135,7 +136,7 @@ func (e *GooseFSEngine) getMounts() (resultInCtx []string, resultHaveMounted []s
 			// No need for a mount point with Fluid native scheme('local://' and 'pvc://') to be mounted
 			continue
 		}
-		goosefsPathHaveMountted := utils.UFSPathBuilder{}.GenAlluxioMountPath(mount, dataset.Status.Mounts)
+		goosefsPathHaveMountted := utils.UFSPathBuilder{}.GenUFSPathInUnifiedNamespace(mount)
 		resultHaveMounted = append(resultHaveMounted, goosefsPathHaveMountted)
 	}
 
@@ -196,35 +197,26 @@ func (e *GooseFSEngine) processUpdatingUFS(ufsToUpdate *utils.UFSToUpdate) (err 
 			continue
 		}
 
-		goosefsPath := utils.UFSPathBuilder{}.GenAlluxioMountPath(mount, dataset.Spec.Mounts)
+		goosefsPath := utils.UFSPathBuilder{}.GenUFSPathInUnifiedNamespace(mount)
 		if len(ufsToUpdate.ToAdd()) > 0 && utils.ContainsString(ufsToUpdate.ToAdd(), goosefsPath) {
 			mountOptions := map[string]string{}
+			for key, value := range dataset.Spec.SharedOptions {
+				mountOptions[key] = value
+			}
+
 			for key, value := range mount.Options {
 				mountOptions[key] = value
 			}
 
 			// Configure mountOptions using encryptOptions
 			// If encryptOptions have the same key with options, it will overwrite the corresponding value
-			for _, encryptOption := range mount.EncryptOptions {
-				key := encryptOption.Name
-				secretKeyRef := encryptOption.ValueFrom.SecretKeyRef
-
-				secret, err := kubeclient.GetSecret(e.Client, secretKeyRef.Name, e.namespace)
-				if err != nil {
-					e.Log.Info("can't get the secret",
-						"namespace", e.namespace,
-						"name", e.name,
-						"secretName", secretKeyRef.Name)
-					return err
-				}
-
-				value := secret.Data[secretKeyRef.Key]
-				e.Log.Info("get value from secret",
-					"namespace", e.namespace,
-					"name", e.name,
-					"secretName", secretKeyRef.Name)
-
-				mountOptions[key] = string(value)
+			mountOptions, err = e.genEncryptOptions(dataset.Spec.SharedEncryptOptions, mountOptions, mount.Name)
+			if err != nil {
+				return err
+			}
+			mountOptions, err = e.genEncryptOptions(mount.EncryptOptions, mountOptions, mount.Name)
+			if err != nil {
+				return err
 			}
 			err = fileUtils.Mount(goosefsPath, mount.MountPoint, mountOptions, mount.ReadOnly, mount.Shared)
 			if err != nil {
@@ -244,7 +236,7 @@ func (e *GooseFSEngine) processUpdatingUFS(ufsToUpdate *utils.UFSToUpdate) (err 
 	}
 	// need to reset ufsTotal to Calculating so that SyncMetadata will work
 	datasetToUpdate := dataset.DeepCopy()
-	datasetToUpdate.Status.UfsTotal = METADATA_SYNC_NOT_DONE_MSG
+	datasetToUpdate.Status.UfsTotal = MetadataSyncNotDoneMsg
 	if !reflect.DeepEqual(dataset.Status, datasetToUpdate.Status) {
 		err = e.Client.Status().Update(context.TODO(), datasetToUpdate)
 		if err != nil {
@@ -284,14 +276,14 @@ func (e *GooseFSEngine) mountUFS() (err error) {
 			continue
 		}
 
-		goosefsPath := utils.UFSPathBuilder{}.GenAlluxioMountPath(mount, dataset.Spec.Mounts)
+		goosefsPath := utils.UFSPathBuilder{}.GenUFSPathInUnifiedNamespace(mount)
 		mounted, err := fileUitls.IsMounted(goosefsPath)
 		e.Log.Info("Check if the goosefs path is mounted.", "goosefsPath", goosefsPath, "mounted", mounted)
 		if err != nil {
 			return err
 		}
 
-		mOptions, err := e.genUFSMountOptions(mount)
+		mOptions, err := e.genUFSMountOptions(mount, dataset.Spec.SharedOptions, dataset.Spec.SharedEncryptOptions)
 		if err != nil {
 			return errors.Wrapf(err, "gen ufs mount options by spec mount item failure,mount name:%s", mount.Name)
 		}
@@ -307,18 +299,42 @@ func (e *GooseFSEngine) mountUFS() (err error) {
 }
 
 // goosefs mount options
-func (e *GooseFSEngine) genUFSMountOptions(m datav1alpha1.Mount) (map[string]string, error) {
+func (e *GooseFSEngine) genUFSMountOptions(m datav1alpha1.Mount, SharedOptions map[string]string, SharedEncryptOptions []datav1alpha1.EncryptOption) (map[string]string, error) {
 
 	// initialize goosefs mount options
 	mOptions := map[string]string{}
-	if len(m.Options) > 0 {
-		mOptions = m.Options
+	if len(SharedOptions) > 0 {
+		mOptions = SharedOptions
+	}
+	for key, value := range m.Options {
+		mOptions[key] = value
 	}
 
-	// if encryptOptions have the same key with options
-	// it will overwrite the corresponding value
-	for _, item := range m.EncryptOptions {
+	var err error
+	mOptions, err = e.genEncryptOptions(SharedEncryptOptions, mOptions, m.Name)
+	if err != nil {
+		return mOptions, err
+	}
 
+	//gen public encryptOptions
+	mOptions, err = e.genEncryptOptions(m.EncryptOptions, mOptions, m.Name)
+	if err != nil {
+		return mOptions, err
+	}
+
+	return mOptions, nil
+}
+
+// goosefs encrypt mount options
+func (e *GooseFSEngine) genEncryptOptions(EncryptOptions []datav1alpha1.EncryptOption, mOptions map[string]string, name string) (map[string]string, error) {
+	for _, item := range EncryptOptions {
+
+		if _, ok := mOptions[item.Name]; ok {
+			err := fmt.Errorf("the option %s is set more than one times, please double check the dataset's option and encryptOptions", item.Name)
+			return mOptions, err
+		}
+
+		securityutil.UpdateSensitiveKey(item.Name)
 		sRef := item.ValueFrom.SecretKeyRef
 		secret, err := kubeclient.GetSecret(e.Client, sRef.Name, e.namespace)
 		if err != nil {
@@ -326,7 +342,7 @@ func (e *GooseFSEngine) genUFSMountOptions(m datav1alpha1.Mount) (map[string]str
 			return mOptions, err
 		}
 
-		e.Log.Info("get value from secret", "mount name", m.Name, "secret key", sRef.Key)
+		e.Log.Info("get value from secret", "mount name", name, "secret key", sRef.Key)
 
 		v := secret.Data[sRef.Key]
 		mOptions[item.Name] = string(v)

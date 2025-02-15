@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +22,7 @@ import (
 	"reflect"
 	"testing"
 
-	. "github.com/agiledragon/gomonkey"
+	. "github.com/agiledragon/gomonkey/v2"
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
@@ -33,7 +34,6 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func TestIsFluidNativeScheme(t *testing.T) {
@@ -82,7 +82,7 @@ func TestGooseFSEngine_getInitUserDir(t *testing.T) {
 				ObjectMeta: v1.ObjectMeta{},
 				Spec:       datav1alpha1.GooseFSRuntimeSpec{},
 				Status:     datav1alpha1.RuntimeStatus{},
-			}, name: "test", namespace: "default", runtimeType: "goosefs", Log: log.NullLogger{}},
+			}, name: "test", namespace: "default", runtimeType: "goosefs", Log: fake.NullLogger()},
 			want: fmt.Sprintf("/tmp/fluid/%s/%s", "default", "test"),
 		},
 	}
@@ -155,7 +155,7 @@ func TestMountRootWithEnvSet(t *testing.T) {
 		{"/var/lib/mymount", "/var/lib/mymount/goosefs"},
 	}
 	for _, tc := range testCases {
-		os.Setenv(utils.MountRoot, tc.input)
+		t.Setenv(utils.MountRoot, tc.input)
 		if tc.expected != getMountRoot() {
 			t.Errorf("expected %#v, got %#v",
 				tc.expected, getMountRoot())
@@ -317,7 +317,7 @@ func TestGetDataSetFileNum(t *testing.T) {
 				},
 				name:      "spark",
 				namespace: "default",
-				Log:       log.NullLogger{},
+				Log:       fake.NullLogger(),
 			},
 			want:    "1000",
 			wantErr: false,
@@ -676,7 +676,7 @@ func TestGetMountPoint(t *testing.T) {
 			fields: fields{
 				name:      "spark",
 				namespace: "default",
-				Log:       log.NullLogger{},
+				Log:       fake.NullLogger(),
 				MountRoot: "/tmp",
 			},
 		},
@@ -688,7 +688,7 @@ func TestGetMountPoint(t *testing.T) {
 				name:      tt.fields.name,
 				namespace: tt.fields.namespace,
 			}
-			os.Setenv("MOUNT_ROOT", tt.fields.MountRoot)
+			t.Setenv("MOUNT_ROOT", tt.fields.MountRoot)
 			wantMountPath := fmt.Sprintf("%s/%s/%s/goosefs-fuse", tt.fields.MountRoot+"/goosefs", tt.fields.namespace, e.name)
 			if gotMountPath := e.getMountPoint(); gotMountPath != wantMountPath {
 				t.Errorf("GooseFSEngine.getMountPoint() = %v, want %v", gotMountPath, wantMountPath)
@@ -752,7 +752,7 @@ func TestGetMountRoot(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("MOUNT_ROOT", "/tmp")
+			t.Setenv("MOUNT_ROOT", "/tmp")
 			if gotPath := getMountRoot(); gotPath != tt.wantPath {
 				t.Errorf("getMountRoot() = %v, want %v", gotPath, tt.wantPath)
 			}
@@ -799,7 +799,7 @@ func TestParseRuntimeImage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := &GooseFSEngine{}
-			os.Setenv(common.GooseFSRuntimeImageEnv, "ccr.ccs.tencentyun.com/qcloud/goosefs:v1.2.0")
+			t.Setenv(common.GooseFSRuntimeImageEnv, "ccr.ccs.tencentyun.com/qcloud/goosefs:v1.2.0")
 			got, got1, got2 := e.parseRuntimeImage(tt.args.image, tt.args.tag, tt.args.imagePullPolicy)
 			if got != tt.want {
 				t.Errorf("GooseFSEngine.parseRuntimeImage() got = %v, want %v", got, tt.want)
@@ -853,7 +853,7 @@ func TestParseFuseImage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := &GooseFSEngine{}
-			os.Setenv(common.GooseFSFuseImageEnv, "ccr.ccs.tencentyun.com/qcloud/goosefs-fuse:v1.2.0")
+			t.Setenv(common.GooseFSFuseImageEnv, "ccr.ccs.tencentyun.com/qcloud/goosefs-fuse:v1.2.0")
 			got, got1, got2 := e.parseFuseImage(tt.args.image, tt.args.tag, tt.args.imagePullPolicy)
 			if got != tt.want {
 				t.Errorf("GooseFSEngine.parseFuseImage() got = %v, want %v", got, tt.want)
@@ -988,7 +988,7 @@ func TestGetWorkerUsedCapacity(t *testing.T) {
 				},
 				name:      "spark",
 				namespace: "default",
-				Log:       log.NullLogger{},
+				Log:       fake.NullLogger(),
 			},
 			want:    map[string]int64{"192.168.1.146": 0, "192.168.1.147": 465452400},
 			wantErr: false,

@@ -17,113 +17,58 @@ limitations under the License.
 package base
 
 import (
-	"context"
 	"fmt"
-
-	"github.com/fluid-cloudnative/fluid/pkg/scripts/poststart"
-	"github.com/fluid-cloudnative/fluid/pkg/utils"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"time"
 
 	"github.com/fluid-cloudnative/fluid/pkg/common"
-	"k8s.io/apimachinery/pkg/types"
+	"github.com/fluid-cloudnative/fluid/pkg/utils"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
+	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 )
 
-var (
-	// datavolume-, volume-localtime for JindoFS
-	// mem, ssd, hdd for Alluxio and GooseFS
-	// cache-dir for JuiceFS
-	cacheDirNames = []string{"datavolume-", "volume-localtime", "cache-dir", "mem", "ssd", "hdd"}
-)
+// GetFuseContainerTemplate collects the fuse container spec from the runtime's fuse daemonSet spec. The function summarizes fuse related information into
+// the template and returns it. The template then can be freely modified according to need of the serverless platform.
+func (info *RuntimeInfo) GetFuseContainerTemplate() (template *common.FuseInjectionTemplate, err error) {
+	if utils.IsTimeTrackerDebugEnabled() {
+		defer utils.TimeTrack(time.Now(), "RuntimeInfo.GetFuseContainerTemplate",
+			"runtime.name", info.name, "runtime.namespace", info.namespace)
+	}
 
-// GetTemplateToInjectForFuse gets template for fuse injection
-func (info *RuntimeInfo) GetTemplateToInjectForFuse(pvcName string, enableCacheDir bool) (template *common.FuseInjectionTemplate, err error) {
-	// TODO: create fuse container
 	ds, err := info.getFuseDaemonset()
 	if err != nil {
 		return template, err
 	}
 
-	dataset, err := utils.GetDataset(info.client, info.name, info.namespace)
-	if err != nil {
-		return template, err
+	if len(ds.Spec.Template.Spec.Containers) <= 0 {
+		return template, fmt.Errorf("the length of containers of fuse daemonset \"%s/%s\" should not be 0", ds.Namespace, ds.Name)
 	}
 
-	ownerReference := metav1.OwnerReference{
-		APIVersion: dataset.APIVersion,
-		Kind:       dataset.Kind,
-		Name:       dataset.Name,
-		UID:        dataset.UID,
-	}
-
-	// 0. remove the cache dir if required
-	if len(ds.Spec.Template.Spec.Containers) != 1 {
-		return template, fmt.Errorf("the length of containers of fuse %s in namespace %s is not 1", ds.Name, ds.Namespace)
-	}
-	if !enableCacheDir {
-		ds.Spec.Template.Spec.Containers[0].VolumeMounts = utils.TrimVolumeMounts(ds.Spec.Template.Spec.Containers[0].VolumeMounts, cacheDirNames)
-		ds.Spec.Template.Spec.Volumes = utils.TrimVolumes(ds.Spec.Template.Spec.Volumes, cacheDirNames)
-	}
-
-	// 1. set the pvc name
 	template = &common.FuseInjectionTemplate{
-		PVCName: pvcName,
+		FuseContainer: ds.Spec.Template.Spec.Containers[0],
+		VolumesToAdd:  utils.FilterVolumesByVolumeMounts(ds.Spec.Template.Spec.Volumes, ds.Spec.Template.Spec.Containers[0].VolumeMounts),
 	}
 
-	// 2. set the fuse container
-	template.FuseContainer = ds.Spec.Template.Spec.Containers[0]
 	template.FuseContainer.Name = common.FuseContainerName
 
-	// template.VolumesToAdd = ds.Spec.Template.Spec.Volumes
-	// 3. inject the post start script for fuse container, if configmap doesn't exist, try to create it.
-	mountPath, mountType, err := kubeclient.GetMountInfoFromVolumeClaim(info.client, pvcName, info.namespace)
+	hostMountPath, mountType, subPath, err := info.getMountInfo()
 	if err != nil {
-		return
+		return template, errors.Wrapf(err, "failed to get mount info by runtimeInfo %s/%s", info.namespace, info.name)
 	}
-	mountPathInContainer, err := kubeclient.GetFuseMountInContainer(mountType, template.FuseContainer)
+
+	fuseVolMount, err := kubeclient.GetFuseMountInContainer(mountType, ds.Spec.Template.Spec.Containers[0])
 	if err != nil {
-		return
+		return template, errors.Wrapf(err, "failed to get fuse volume mount from container")
 	}
 
-	gen := poststart.NewGenerator(types.NamespacedName{
-		Name:      info.name,
-		Namespace: info.namespace,
-	}, mountPathInContainer.MountPath, mountType)
-	cm := gen.BuildConfigmap(ownerReference)
-	found, err := kubeclient.IsConfigMapExist(info.client, cm.Name, cm.Namespace)
-	if err != nil {
-		return template, err
+	template.FuseMountInfo = common.FuseMountInfo{
+		FsType:             mountType,
+		HostMountPath:      hostMountPath,
+		ContainerMountPath: fuseVolMount.MountPath,
+		SubPath:            subPath,
 	}
 
-	if !found {
-		err = info.client.Create(context.TODO(), cm)
-		if err != nil {
-			return template, err
-		}
-	}
-
-	template.FuseContainer.VolumeMounts = append(template.FuseContainer.VolumeMounts, gen.GetVolumeMount())
-	if template.FuseContainer.Lifecycle == nil {
-		template.FuseContainer.Lifecycle = &corev1.Lifecycle{}
-	}
-	template.FuseContainer.Lifecycle.PostStart = gen.GetPostStartCommand()
-
-	// 4. create a volume with pvcName with mountpath in pv, and add it to VolumesToUpdate
-	template.VolumesToUpdate = []corev1.Volume{
-		{
-			Name: pvcName,
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{
-					Path: mountPath,
-				},
-			},
-		},
-	}
-	template.VolumesToAdd = append(ds.Spec.Template.Spec.Volumes, gen.GetVolume())
-
-	return
+	return template, nil
 }
 
 func (info *RuntimeInfo) getFuseDaemonset() (ds *appsv1.DaemonSet, err error) {
@@ -140,4 +85,22 @@ func (info *RuntimeInfo) getFuseDaemonset() (ds *appsv1.DaemonSet, err error) {
 		fuseName = info.name + "-fuse"
 	}
 	return kubeclient.GetDaemonset(info.client, fuseName, info.GetNamespace())
+}
+
+func (info *RuntimeInfo) getMountInfo() (path, mountType, subpath string, err error) {
+	pv, err := kubeclient.GetPersistentVolume(info.client, info.GetPersistentVolumeName())
+	if err != nil {
+		err = errors.Wrapf(err, "cannot find pvc \"%s/%s\"'s bounded PV", info.namespace, info.name)
+		return
+	}
+
+	if pv.Spec.CSI != nil && len(pv.Spec.CSI.VolumeAttributes) > 0 {
+		path = pv.Spec.CSI.VolumeAttributes[common.VolumeAttrFluidPath]
+		mountType = pv.Spec.CSI.VolumeAttributes[common.VolumeAttrMountType]
+		subpath = pv.Spec.CSI.VolumeAttributes[common.VolumeAttrFluidSubPath]
+	} else {
+		err = fmt.Errorf("the pv %s is not created by fluid", pv.Name)
+	}
+
+	return
 }

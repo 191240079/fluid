@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	v1 "k8s.io/api/apps/v1"
@@ -24,18 +25,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func newJindoEngineRT(client client.Client, name string, namespace string, withRuntimeInfo bool) *JindoEngine {
-	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, "GooseFS", datav1alpha1.TieredStore{})
+	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, common.JindoRuntime)
 	engine := &JindoEngine{
 		runtime:     &datav1alpha1.JindoRuntime{},
 		name:        name,
 		namespace:   namespace,
 		Client:      client,
 		runtimeInfo: nil,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 	}
 
 	if withRuntimeInfo {
@@ -52,9 +52,7 @@ func TestGetRuntimeInfo(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: datav1alpha1.JindoRuntimeSpec{
-				Fuse: datav1alpha1.JindoFuseSpec{
-					Global: true,
-				},
+				Fuse: datav1alpha1.JindoFuseSpec{},
 			},
 		},
 		{
@@ -63,9 +61,7 @@ func TestGetRuntimeInfo(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: datav1alpha1.JindoRuntimeSpec{
-				Fuse: datav1alpha1.JindoFuseSpec{
-					Global: false,
-				},
+				Fuse: datav1alpha1.JindoFuseSpec{},
 			},
 		},
 	}

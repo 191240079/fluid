@@ -22,19 +22,19 @@ import (
 	"testing"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var (
@@ -225,7 +225,7 @@ func TestCheckFuseHealthy(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 
-		runtimeInfo, err := base.BuildRuntimeInfo(testCase.name, testCase.namespace, "jindo", datav1alpha1.TieredStore{})
+		runtimeInfo, err := base.BuildRuntimeInfo(testCase.name, testCase.namespace, common.JindoRuntime)
 		if err != nil {
 			t.Errorf("testcase %s failed due to %v", testCase.name, err)
 		}
@@ -250,7 +250,7 @@ func TestCheckFuseHealthy(t *testing.T) {
 			t.Errorf("sync replicas failed,err:%s", err.Error())
 		}
 
-		h := BuildHelper(runtimeInfo, fakeClient, log.NullLogger{})
+		h := BuildHelper(runtimeInfo, fakeClient, fake.NullLogger())
 
 		err = h.CheckFuseHealthy(record.NewFakeRecorder(300),
 			runtime, runtime.Status, ds)
@@ -286,7 +286,7 @@ func TestCleanUpFuse(t *testing.T) {
 		context          cruntime.ReconcileRequestContext
 		log              logr.Logger
 		runtimeType      string
-		nodeInputs       []*v1.Node
+		nodeInputs       []*corev1.Node
 	}{
 		{
 			wantedCount: 1,
@@ -308,9 +308,9 @@ func TestCleanUpFuse(t *testing.T) {
 					"node-select":             "true",
 				},
 			},
-			log:         log.NullLogger{},
+			log:         fake.NullLogger(),
 			runtimeType: "jindo",
-			nodeInputs: []*v1.Node{
+			nodeInputs: []*corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:   "no-fuse",
@@ -362,9 +362,9 @@ func TestCleanUpFuse(t *testing.T) {
 					"node-select":          "true",
 				},
 			},
-			log:         log.NullLogger{},
+			log:         fake.NullLogger(),
 			runtimeType: "alluxio",
-			nodeInputs: []*v1.Node{
+			nodeInputs: []*corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:   "no-fuse",
@@ -418,9 +418,9 @@ func TestCleanUpFuse(t *testing.T) {
 					"node-select":            "true",
 				},
 			},
-			log:         log.NullLogger{},
+			log:         fake.NullLogger(),
 			runtimeType: "goosefs",
-			nodeInputs: []*v1.Node{
+			nodeInputs: []*corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:   "no-fuse",
@@ -463,12 +463,11 @@ func TestCleanUpFuse(t *testing.T) {
 
 		fakeClient := fake.NewFakeClientWithScheme(testScheme, testNodes...)
 
-		nodeList := &v1.NodeList{}
+		nodeList := &corev1.NodeList{}
 		runtimeInfo, err := base.BuildRuntimeInfo(
 			test.name,
 			test.namespace,
 			test.runtimeType,
-			datav1alpha1.TieredStore{},
 		)
 		if err != nil {
 			t.Errorf("build runtime info error %v", err)

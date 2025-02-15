@@ -30,6 +30,7 @@ func PVCNames(volumeMounts []corev1.VolumeMount, volumes []corev1.Volume) (pvcNa
 		volumes)
 }
 
+// volumeNamesFromMounts gets all the volume names refered by given volumeMounts
 func volumeNamesFromMounts(volumeMounts []corev1.VolumeMount) (volumeNames []string) {
 	volumeNameMap := map[string]bool{}
 
@@ -51,7 +52,7 @@ func volumeNamesFromMounts(volumeMounts []corev1.VolumeMount) (volumeNames []str
 
 }
 
-// pvcNamesFromVolumes gets the pvcNames from names of volumeMounts and volumes
+// pvcNamesFromVolumes gets the pvcNames from existing volume names and volume specs
 func pvcNamesFromVolumes(knownVolumeNames []string, volumes []corev1.Volume) (pvcNames []string) {
 	vMap := map[string]corev1.Volume{}
 	for _, v := range volumes {
@@ -73,19 +74,27 @@ func pvcNamesFromVolumes(knownVolumeNames []string, volumes []corev1.Volume) (pv
 
 func GetFuseMountInContainer(mountType string, container corev1.Container) (volumeMount corev1.VolumeMount, err error) {
 	kv := map[string]string{
-		common.JindoMountType:     common.JindoChartName,
-		common.JindoRuntime:       common.JindoChartName,
-		common.ALLUXIO_MOUNT_TYPE: common.ALLUXIO_CHART,
-		common.ALLUXIO_RUNTIME:    common.ALLUXIO_CHART,
-		common.GooseFSMountType:   common.GooseFSChart,
-		common.JuiceFSMountType:   common.JuiceFSChart,
-		common.JuiceFSRuntime:     common.JuiceFSChart,
+		common.JindoMountType:   common.JindoChartName,
+		common.JindoRuntime:     common.JindoChartName,
+		common.AlluxioMountType: common.AlluxioChart,
+		common.AlluxioRuntime:   common.AlluxioChart,
+		common.GooseFSMountType: common.GooseFSChart,
+		common.JuiceFSMountType: common.JuiceFSChart,
+		common.JuiceFSRuntime:   common.JuiceFSChart,
 	}
 
 	volumeMountName := ""
 	if prefix, found := kv[mountType]; found {
 		volumeMountName = prefix + "-fuse-mount"
 	} else {
+		for _, vm := range container.VolumeMounts {
+			if vm.Name == common.ThinMountType {
+				volumeMountName = common.ThinMountType
+				break
+			}
+		}
+	}
+	if len(volumeMountName) == 0 {
 		err = fmt.Errorf("failed to find the prefix by mountType %s", mountType)
 		return
 	}
@@ -93,16 +102,6 @@ func GetFuseMountInContainer(mountType string, container corev1.Container) (volu
 	for _, vm := range container.VolumeMounts {
 		if vm.Name == volumeMountName {
 			volumeMount = vm
-			// If it's JindoRuntime, should consider the env FLUID_FUSE_MOUNTPOINT
-			// if vm.Name == common.JindoFuseMountVolumeName {
-			if len(container.Env) > 0 {
-				for _, env := range container.Env {
-					if env.Name == common.FuseMountEnv {
-						volumeMount.MountPath = env.Value
-					}
-				}
-			}
-			// }
 			return
 		}
 	}
@@ -114,7 +113,7 @@ func GetFuseMountInContainer(mountType string, container corev1.Container) (volu
 func GetMountPathInContainer(container corev1.Container) (string, error) {
 	kv := map[string]string{
 		common.JindoChartName: "jindofs-fuse",
-		common.ALLUXIO_CHART:  "alluxio-fuse",
+		common.AlluxioChart:   "alluxio-fuse",
 		common.GooseFSChart:   "goosefs-fuse",
 		common.JuiceFSChart:   "juicefs-fuse",
 	}

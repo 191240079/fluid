@@ -18,6 +18,7 @@ package requirenodewithfuse
 
 import (
 	"fmt"
+	"github.com/fluid-cloudnative/fluid/pkg/webhook/plugins/api"
 
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
@@ -30,18 +31,18 @@ import (
    They should require nods with fuse.
 */
 
-const NAME = "RequireNodeWithFuse"
+const Name = "RequireNodeWithFuse"
 
 type RequireNodeWithFuse struct {
 	client client.Client
 	name   string
 }
 
-func NewPlugin(c client.Client) *RequireNodeWithFuse {
+func NewPlugin(c client.Client, args string) (api.MutatingHandler, error) {
 	return &RequireNodeWithFuse{
 		client: c,
-		name:   NAME,
-	}
+		name:   Name,
+	}, nil
 }
 
 func (p *RequireNodeWithFuse) GetName() string {
@@ -88,25 +89,13 @@ func getRequiredSchedulingTerm(runtimeInfo base.RuntimeInfoInterface) (requiredS
 		return
 	}
 
-	isGlobalMode, selectors := runtimeInfo.GetFuseDeployMode()
-	if isGlobalMode {
-		for key, value := range selectors {
-			requiredSchedulingTerm.MatchExpressions = append(requiredSchedulingTerm.MatchExpressions, corev1.NodeSelectorRequirement{
-				Key:      key,
-				Operator: corev1.NodeSelectorOpIn,
-				Values:   []string{value},
-			})
-		}
-	} else {
-		requiredSchedulingTerm = corev1.NodeSelectorTerm{
-			MatchExpressions: []corev1.NodeSelectorRequirement{
-				{
-					Key:      runtimeInfo.GetCommonLabelName(),
-					Operator: corev1.NodeSelectorOpIn,
-					Values:   []string{"true"},
-				},
-			},
-		}
+	selectors := runtimeInfo.GetFuseNodeSelector()
+	for key, value := range selectors {
+		requiredSchedulingTerm.MatchExpressions = append(requiredSchedulingTerm.MatchExpressions, corev1.NodeSelectorRequirement{
+			Key:      key,
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   []string{value},
+		})
 	}
 
 	return

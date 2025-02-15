@@ -1,4 +1,5 @@
 /*
+Copyright 2021 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,24 +17,25 @@ limitations under the License.
 package alluxio
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"reflect"
 	"testing"
 
-	. "github.com/agiledragon/gomonkey"
-	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
-	"github.com/fluid-cloudnative/fluid/pkg/common"
-	"github.com/fluid-cloudnative/fluid/pkg/utils"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
+	. "github.com/agiledragon/gomonkey/v2"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
+	"github.com/fluid-cloudnative/fluid/pkg/utils"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 )
 
 func TestIsFluidNativeScheme(t *testing.T) {
@@ -62,14 +64,13 @@ func TestIsFluidNativeScheme(t *testing.T) {
 
 func TestAlluxioEngine_getInitUserDir(t *testing.T) {
 	type fields struct {
-		runtime                *datav1alpha1.AlluxioRuntime
-		name                   string
-		namespace              string
-		runtimeType            string
-		Log                    logr.Logger
-		Client                 client.Client
-		gracefulShutdownLimits int32
-		retryShutdown          int32
+		runtime       *datav1alpha1.AlluxioRuntime
+		name          string
+		namespace     string
+		runtimeType   string
+		Log           logr.Logger
+		Client        client.Client
+		retryShutdown int32
 	}
 	tests := []struct {
 		name   string
@@ -82,21 +83,20 @@ func TestAlluxioEngine_getInitUserDir(t *testing.T) {
 				ObjectMeta: v1.ObjectMeta{},
 				Spec:       datav1alpha1.AlluxioRuntimeSpec{},
 				Status:     datav1alpha1.RuntimeStatus{},
-			}, name: "test", namespace: "default", runtimeType: "alluxio", Log: log.NullLogger{}},
+			}, name: "test", namespace: "default", runtimeType: "alluxio", Log: fake.NullLogger()},
 			want: fmt.Sprintf("/tmp/fluid/%s/%s", "default", "test"),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := &AlluxioEngine{
-				runtime:                tt.fields.runtime,
-				name:                   tt.fields.name,
-				namespace:              tt.fields.namespace,
-				runtimeType:            tt.fields.runtimeType,
-				Log:                    tt.fields.Log,
-				Client:                 tt.fields.Client,
-				gracefulShutdownLimits: tt.fields.gracefulShutdownLimits,
-				retryShutdown:          tt.fields.retryShutdown,
+				runtime:       tt.fields.runtime,
+				name:          tt.fields.name,
+				namespace:     tt.fields.namespace,
+				runtimeType:   tt.fields.runtimeType,
+				Log:           tt.fields.Log,
+				Client:        tt.fields.Client,
+				retryShutdown: tt.fields.retryShutdown,
 			}
 			if got := e.getInitUserDir(); got != tt.want {
 				t.Errorf("AlluxioEngine.getInitUserDir() = %v, want %v", got, tt.want)
@@ -155,7 +155,7 @@ func TestMountRootWithEnvSet(t *testing.T) {
 		{"/var/lib/mymount", "/var/lib/mymount/alluxio"},
 	}
 	for _, tc := range testCases {
-		os.Setenv(utils.MountRoot, tc.input)
+		t.Setenv(utils.MountRoot, tc.input)
 		if tc.expected != getMountRoot() {
 			t.Errorf("expected %#v, got %#v",
 				tc.expected, getMountRoot())
@@ -317,7 +317,7 @@ func TestGetDataSetFileNum(t *testing.T) {
 				},
 				name:      "spark",
 				namespace: "default",
-				Log:       log.NullLogger{},
+				Log:       fake.NullLogger(),
 			},
 			want:    "1000",
 			wantErr: false,
@@ -332,7 +332,7 @@ func TestGetDataSetFileNum(t *testing.T) {
 				Log:       tt.fields.Log,
 			}
 
-			patch1 := ApplyFunc(kubeclient.ExecCommandInContainer, func(podName string, containerName string, namespace string, cmd []string) (string, string, error) {
+			patch1 := ApplyFunc(kubeclient.ExecCommandInContainerWithFullOutput, func(ctx context.Context, podName string, containerName string, namespace string, cmd []string) (string, string, error) {
 				stdout, stderr, err := mockExecCommandInContainerForGetFileCount()
 				return stdout, stderr, err
 			})
@@ -738,7 +738,7 @@ func TestGetMountPoint(t *testing.T) {
 			fields: fields{
 				name:      "spark",
 				namespace: "default",
-				Log:       log.NullLogger{},
+				Log:       fake.NullLogger(),
 				MountRoot: "/tmp",
 			},
 		},
@@ -750,7 +750,7 @@ func TestGetMountPoint(t *testing.T) {
 				name:      tt.fields.name,
 				namespace: tt.fields.namespace,
 			}
-			os.Setenv("MOUNT_ROOT", tt.fields.MountRoot)
+			t.Setenv("MOUNT_ROOT", tt.fields.MountRoot)
 			wantMountPath := fmt.Sprintf("%s/%s/%s/alluxio-fuse", tt.fields.MountRoot+"/alluxio", tt.fields.namespace, e.name)
 			if gotMountPath := e.getMountPoint(); gotMountPath != wantMountPath {
 				t.Errorf("AlluxioEngine.getMountPoint() = %v, want %v", gotMountPath, wantMountPath)
@@ -814,7 +814,7 @@ func TestGetMountRoot(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("MOUNT_ROOT", "/tmp")
+			t.Setenv("MOUNT_ROOT", "/tmp")
 			if gotPath := getMountRoot(); gotPath != tt.wantPath {
 				t.Errorf("getMountRoot() = %v, want %v", gotPath, tt.wantPath)
 			}
@@ -824,45 +824,82 @@ func TestGetMountRoot(t *testing.T) {
 
 func TestParseRuntimeImage(t *testing.T) {
 	type args struct {
-		image           string
-		tag             string
-		imagePullPolicy string
+		image            string
+		tag              string
+		imagePullPolicy  string
+		imagePullSecrets []corev1.LocalObjectReference
 	}
+
+	type envs map[string]string
+
 	tests := []struct {
 		name  string
 		args  args
+		envs  envs
 		want  string
 		want1 string
 		want2 string
+		want3 []corev1.LocalObjectReference
 	}{
 		{
 			name: "test0",
 			args: args{
-				image:           "registry.cn-huhehaote.aliyuncs.com/alluxio/alluxio",
-				tag:             "2.3.0-SNAPSHOT-2c41226",
-				imagePullPolicy: "IfNotPresent",
+				image:            "registry.cn-huhehaote.aliyuncs.com/alluxio/alluxio",
+				tag:              "2.3.0-SNAPSHOT-2c41226",
+				imagePullPolicy:  "IfNotPresent",
+				imagePullSecrets: []corev1.LocalObjectReference{{Name: "test"}},
+			},
+			envs: map[string]string{
+				common.AlluxioRuntimeImageEnv: "registry.cn-huhehaote.aliyuncs.com/alluxio/alluxio:2.3.0-SNAPSHOT-2c41226",
 			},
 			want:  "registry.cn-huhehaote.aliyuncs.com/alluxio/alluxio",
 			want1: "2.3.0-SNAPSHOT-2c41226",
 			want2: "IfNotPresent",
+			want3: []corev1.LocalObjectReference{{Name: "test"}},
 		},
 		{
-			name: "test0",
+			name: "test1",
 			args: args{
-				image:           "",
-				tag:             "",
-				imagePullPolicy: "IfNotPresent",
+				image:            "",
+				tag:              "",
+				imagePullPolicy:  "IfNotPresent",
+				imagePullSecrets: []corev1.LocalObjectReference{},
+			},
+			envs: map[string]string{
+				common.AlluxioRuntimeImageEnv: "registry.cn-huhehaote.aliyuncs.com/alluxio/alluxio:2.3.0-SNAPSHOT-2c41226",
+				common.EnvImagePullSecretsKey: "secret1,secret2",
 			},
 			want:  "registry.cn-huhehaote.aliyuncs.com/alluxio/alluxio",
 			want1: "2.3.0-SNAPSHOT-2c41226",
 			want2: "IfNotPresent",
+			want3: []corev1.LocalObjectReference{{Name: "secret1"}, {Name: "secret2"}},
+		},
+		{
+			name: "test2",
+			args: args{
+				image:            "",
+				tag:              "",
+				imagePullPolicy:  "IfNotPresent",
+				imagePullSecrets: []corev1.LocalObjectReference{{Name: "test"}},
+			},
+			envs: map[string]string{
+				common.AlluxioRuntimeImageEnv: "registry.cn-huhehaote.aliyuncs.com/alluxio/alluxio:2.3.0-SNAPSHOT-2c41226",
+				common.EnvImagePullSecretsKey: "secret1,secret2",
+			},
+			want:  "registry.cn-huhehaote.aliyuncs.com/alluxio/alluxio",
+			want1: "2.3.0-SNAPSHOT-2c41226",
+			want2: "IfNotPresent",
+			want3: []corev1.LocalObjectReference{{Name: "test"}},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := &AlluxioEngine{}
-			os.Setenv(common.ALLUXIO_RUNTIME_IMAGE_ENV, "registry.cn-huhehaote.aliyuncs.com/alluxio/alluxio:2.3.0-SNAPSHOT-2c41226")
-			got, got1, got2 := e.parseRuntimeImage(tt.args.image, tt.args.tag, tt.args.imagePullPolicy)
+			for k, v := range tt.envs {
+				// mock env
+				t.Setenv(k, v)
+			}
+			got, got1, got2, got3 := e.parseRuntimeImage(tt.args.image, tt.args.tag, tt.args.imagePullPolicy, tt.want3)
 			if got != tt.want {
 				t.Errorf("AlluxioEngine.parseRuntimeImage() got = %v, want %v", got, tt.want)
 			}
@@ -872,15 +909,19 @@ func TestParseRuntimeImage(t *testing.T) {
 			if got2 != tt.want2 {
 				t.Errorf("AlluxioEngine.parseRuntimeImage() got2 = %v, want %v", got2, tt.want2)
 			}
+			if !reflect.DeepEqual(got3, tt.want3) {
+				t.Errorf("AlluxioEngine.parseRuntimeImage() imagePullSecrets got3 = %v, want %v", got3, tt.want3)
+			}
 		})
 	}
 }
 
 func TestParseFuseImage(t *testing.T) {
 	type args struct {
-		image           string
-		tag             string
-		imagePullPolicy string
+		image            string
+		tag              string
+		imagePullPolicy  string
+		imagePullSecrets []corev1.LocalObjectReference
 	}
 	tests := []struct {
 		name  string
@@ -888,6 +929,7 @@ func TestParseFuseImage(t *testing.T) {
 		want  string
 		want1 string
 		want2 string
+		want3 []corev1.LocalObjectReference
 	}{
 		{
 			name: "test0",
@@ -911,12 +953,25 @@ func TestParseFuseImage(t *testing.T) {
 			want1: "2.3.0-SNAPSHOT-2c41226",
 			want2: "IfNotPresent",
 		},
+		{
+			name: "test2",
+			args: args{
+				image:            "",
+				tag:              "",
+				imagePullPolicy:  "IfNotPresent",
+				imagePullSecrets: []corev1.LocalObjectReference{{Name: "secret-fuse"}},
+			},
+			want:  "registry.cn-huhehaote.aliyuncs.com/alluxio/alluxio-fuse",
+			want1: "2.3.0-SNAPSHOT-2c41226",
+			want2: "IfNotPresent",
+			want3: []corev1.LocalObjectReference{{Name: "secret-fuse"}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := &AlluxioEngine{}
-			os.Setenv(common.ALLUXIO_FUSE_IMAGE_ENV, "registry.cn-huhehaote.aliyuncs.com/alluxio/alluxio-fuse:2.3.0-SNAPSHOT-2c41226")
-			got, got1, got2 := e.parseFuseImage(tt.args.image, tt.args.tag, tt.args.imagePullPolicy)
+			t.Setenv(common.AlluxioFuseImageEnv, "registry.cn-huhehaote.aliyuncs.com/alluxio/alluxio-fuse:2.3.0-SNAPSHOT-2c41226")
+			got, got1, got2, got3 := e.parseFuseImage(tt.args.image, tt.args.tag, tt.args.imagePullPolicy, tt.args.imagePullSecrets)
 			if got != tt.want {
 				t.Errorf("AlluxioEngine.parseFuseImage() got = %v, want %v", got, tt.want)
 			}
@@ -925,6 +980,9 @@ func TestParseFuseImage(t *testing.T) {
 			}
 			if got2 != tt.want2 {
 				t.Errorf("AlluxioEngine.parseFuseImage() got2 = %v, want %v", got2, tt.want2)
+			}
+			if len(tt.want3) > 0 && !reflect.DeepEqual(got3, tt.want3) {
+				t.Errorf("AlluxioEngine.parseFuseImage() got3 = %v, want %v", got3, tt.want3)
 			}
 		})
 	}
@@ -1050,7 +1108,7 @@ func TestGetWorkerUsedCapacity(t *testing.T) {
 				},
 				name:      "spark",
 				namespace: "default",
-				Log:       log.NullLogger{},
+				Log:       fake.NullLogger(),
 			},
 			want:    map[string]int64{"192.168.1.146": 0, "192.168.1.147": 465452400},
 			wantErr: false,
@@ -1065,7 +1123,7 @@ func TestGetWorkerUsedCapacity(t *testing.T) {
 				Log:       tt.fields.Log,
 			}
 
-			patch1 := ApplyFunc(kubeclient.ExecCommandInContainer, func(podName string, containerName string, namespace string, cmd []string) (string, string, error) {
+			patch1 := ApplyFunc(kubeclient.ExecCommandInContainerWithFullOutput, func(ctx context.Context, podName string, containerName string, namespace string, cmd []string) (string, string, error) {
 				stdout, stderr, err := mockExecCommandInContainerForWorkerUsedCapacity()
 				return stdout, stderr, err
 			})

@@ -18,7 +18,6 @@ package goosefs
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
@@ -26,7 +25,6 @@ import (
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/helm"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubectl"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -63,7 +61,7 @@ func (e *GooseFSEngine) setupMasterInternal() (err error) {
 func (e *GooseFSEngine) generateGooseFSValueFile(runtime *datav1alpha1.GooseFSRuntime) (valueFileName string, err error) {
 
 	//0. Check if the configmap exists
-	err = kubeclient.DeleteConfigMap(e.Client, e.getConfigmapName(), e.namespace)
+	err = kubeclient.DeleteConfigMap(e.Client, e.getHelmValuesConfigMapName(), e.namespace)
 
 	if err != nil {
 		e.Log.Error(err, "Failed to clean value files")
@@ -86,7 +84,7 @@ func (e *GooseFSEngine) generateGooseFSValueFile(runtime *datav1alpha1.GooseFSRu
 	}
 
 	//2. Get the template value file
-	valueFile, err := ioutil.TempFile(os.TempDir(), fmt.Sprintf("%s-%s-values.yaml", e.name, e.runtimeType))
+	valueFile, err := os.CreateTemp(os.TempDir(), fmt.Sprintf("%s-%s-values.yaml", e.name, e.engineImpl))
 	if err != nil {
 		e.Log.Error(err, "failed to create value file", "valueFile", valueFile.Name())
 		return valueFileName, err
@@ -95,13 +93,15 @@ func (e *GooseFSEngine) generateGooseFSValueFile(runtime *datav1alpha1.GooseFSRu
 	valueFileName = valueFile.Name()
 	e.Log.V(1).Info("Save the values file", "valueFile", valueFileName)
 
-	err = ioutil.WriteFile(valueFileName, data, 0400)
+	err = os.WriteFile(valueFileName, data, 0400)
 	if err != nil {
 		return
 	}
 
 	//3. Save the configfile into configmap
-	err = kubectl.CreateConfigMapFromFile(e.getConfigmapName(), "data", valueFileName, e.namespace)
+	runtimeInfo := e.runtimeInfo
+	ownerDatasetId := utils.GetDatasetId(runtimeInfo.GetNamespace(), runtimeInfo.GetName(), runtimeInfo.GetOwnerDatasetUID())
+	err = kubeclient.CreateConfigMap(e.Client, e.getHelmValuesConfigMapName(), e.namespace, "data", data, ownerDatasetId)
 	if err != nil {
 		return
 	}
@@ -109,6 +109,6 @@ func (e *GooseFSEngine) generateGooseFSValueFile(runtime *datav1alpha1.GooseFSRu
 	return valueFileName, err
 }
 
-func (e *GooseFSEngine) getConfigmapName() string {
-	return e.name + "-" + e.runtimeType + "-values"
+func (e *GooseFSEngine) getHelmValuesConfigMapName() string {
+	return e.name + "-" + e.engineImpl + "-values"
 }

@@ -1,17 +1,33 @@
+/*
+Copyright 2023 The Fluid Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package utils
 
 import (
 	"errors"
-	. "github.com/agiledragon/gomonkey"
-	. "github.com/smartystreets/goconvey/convey"
-	"io/ioutil"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/mount"
 	"os"
 	"os/exec"
 	"reflect"
 	"testing"
+
+	. "github.com/agiledragon/gomonkey/v2"
+	. "github.com/smartystreets/goconvey/convey"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/mount"
 )
 
 func TestMountRootWithEnvSet(t *testing.T) {
@@ -22,7 +38,7 @@ func TestMountRootWithEnvSet(t *testing.T) {
 		{"/var/lib/mymount", "/var/lib/mymount"},
 	}
 	for _, tc := range testCases {
-		os.Setenv(MountRoot, tc.input)
+		t.Setenv(MountRoot, tc.input)
 		mountRoot, err := GetMountRoot()
 		if err != nil {
 			t.Errorf("Get error %v", err)
@@ -48,7 +64,7 @@ func TestMountRootWithoutEnvSet(t *testing.T) {
 			t.Errorf("Expected error happened, but no error")
 		}
 
-		if err.Error() != "the the value of the env variable named MOUNT_ROOT is illegal" {
+		if err.Error() != "invalid mount root path '': the mount root path is empty" {
 			t.Errorf("Get unexpected error %v", err)
 		}
 
@@ -68,7 +84,7 @@ func TestCheckMountReady(t *testing.T) {
 			})
 			defer patch1.Reset()
 
-			err := CheckMountReady("/test", "test")
+			err := CheckMountReadyAndSubPathExist("/test", "test", "")
 			So(err, ShouldBeNil)
 		})
 		Convey("CheckMountReady false", func() {
@@ -78,11 +94,15 @@ func TestCheckMountReady(t *testing.T) {
 			})
 			defer patch1.Reset()
 
-			err := CheckMountReady("/test", "test")
+			err := CheckMountReadyAndSubPathExist("/test", "test", "")
 			So(err, ShouldNotBeNil)
 		})
 		Convey("fluidPath nil", func() {
-			err := CheckMountReady("", "test")
+			err := CheckMountReadyAndSubPathExist("", "test", "")
+			So(err, ShouldNotBeNil)
+		})
+		Convey("illegal subpath", func() {
+			err := CheckMountReadyAndSubPathExist("/test", "test", "$(echo)")
 			So(err, ShouldNotBeNil)
 		})
 	})
@@ -95,7 +115,7 @@ func TestIsMounted(t *testing.T) {
 				return nil, nil
 			})
 			defer patch2.Reset()
-			patch1 := ApplyFunc(ioutil.ReadFile, func(filename string) ([]byte, error) {
+			patch1 := ApplyFunc(os.ReadFile, func(filename string) ([]byte, error) {
 				return []byte("JuiceFS:minio /var/lib/kubelet/pods/4781fc5b-72f9-4175-9321-2e1f169880ce/volumes/kubernetes.io~csi/default-jfsdemo/mount fuse.juicefs rw,relatime,user_id=0,group_id=0,default_permissions,allow_other 0 0"), nil
 			})
 			defer patch1.Reset()
@@ -106,7 +126,7 @@ func TestIsMounted(t *testing.T) {
 			So(mounted, ShouldBeTrue)
 		})
 		Convey("IsMounted false", func() {
-			patch1 := ApplyFunc(ioutil.ReadFile, func(filename string) ([]byte, error) {
+			patch1 := ApplyFunc(os.ReadFile, func(filename string) ([]byte, error) {
 				return []byte("JuiceFS:minio /var/lib/kubelet/pods/4781fc5b-72f9-4175-9321-2e1f169880ce/volumes/kubernetes.io~csi/default-jfsdemo/mount fuse.juicefs rw,relatime,user_id=0,group_id=0,default_permissions,allow_other 0 0"), nil
 			})
 			defer patch1.Reset()
@@ -121,7 +141,7 @@ func TestIsMounted(t *testing.T) {
 			So(mounted, ShouldBeFalse)
 		})
 		Convey("token len is 1", func() {
-			patch1 := ApplyFunc(ioutil.ReadFile, func(filename string) ([]byte, error) {
+			patch1 := ApplyFunc(os.ReadFile, func(filename string) ([]byte, error) {
 				return []byte("JuiceFS:minio "), nil
 			})
 			defer patch1.Reset()

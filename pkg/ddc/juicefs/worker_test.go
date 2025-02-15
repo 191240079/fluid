@@ -19,8 +19,9 @@ package juicefs
 import (
 	"testing"
 
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	ctrlhelper "github.com/fluid-cloudnative/fluid/pkg/ctrl"
-	utilpointer "k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	appsv1 "k8s.io/api/apps/v1"
@@ -154,7 +155,7 @@ func TestJuiceFSEngine_ShouldSetupWorkers(t *testing.T) {
 }
 
 func TestJuiceFSEngine_SetupWorkers(t *testing.T) {
-	runtimeInfo, err := base.BuildRuntimeInfo("juicefs", "fluid", "juicefs", datav1alpha1.TieredStore{})
+	runtimeInfo, err := base.BuildRuntimeInfo("juicefs", "fluid", common.JuiceFSRuntime)
 
 	if err != nil {
 		t.Errorf("fail to create the runtimeInfo with error %v", err)
@@ -166,7 +167,7 @@ func TestJuiceFSEngine_SetupWorkers(t *testing.T) {
 	nodeSelector := map[string]string{
 		"node-select": "true",
 	}
-	runtimeInfo.SetupFuseDeployMode(true, nodeSelector)
+	runtimeInfo.SetFuseNodeSelector(nodeSelector)
 
 	type fields struct {
 		replicas    int32
@@ -199,7 +200,7 @@ func TestJuiceFSEngine_SetupWorkers(t *testing.T) {
 						Namespace: "fluid",
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: utilpointer.Int32Ptr(1),
+						Replicas: ptr.To[int32](1),
 					},
 				},
 				runtime: &datav1alpha1.JuiceFSRuntime{
@@ -297,9 +298,7 @@ func TestJuiceFSEngine_CheckWorkersReady(t *testing.T) {
 					},
 					Spec: datav1alpha1.JuiceFSRuntimeSpec{
 						Replicas: 1,
-						Fuse: datav1alpha1.JuiceFSFuseSpec{
-							Global: true,
-						},
+						Fuse:     datav1alpha1.JuiceFSFuseSpec{},
 					},
 				},
 				worker: &appsv1.StatefulSet{
@@ -339,9 +338,7 @@ func TestJuiceFSEngine_CheckWorkersReady(t *testing.T) {
 					},
 					Spec: datav1alpha1.JuiceFSRuntimeSpec{
 						Replicas: 1,
-						Fuse: datav1alpha1.JuiceFSFuseSpec{
-							Global: true,
-						},
+						Fuse:     datav1alpha1.JuiceFSFuseSpec{},
 					},
 				},
 				worker: &appsv1.StatefulSet{
@@ -396,7 +393,7 @@ func TestJuiceFSEngine_CheckWorkersReady(t *testing.T) {
 				Client:    mockClient,
 				Log:       ctrl.Log.WithName(tt.fields.name),
 			}
-			runtimeInfo, err := base.BuildRuntimeInfo(tt.fields.name, tt.fields.namespace, "juicefs", datav1alpha1.TieredStore{})
+			runtimeInfo, err := base.BuildRuntimeInfo(tt.fields.name, tt.fields.namespace, common.JuiceFSRuntime)
 			if err != nil {
 				t.Errorf("JuiceFSEngine.CheckWorkersReady() error = %v", err)
 			}

@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,16 +17,17 @@ limitations under the License.
 package operations
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
+	securityutils "github.com/fluid-cloudnative/fluid/pkg/utils/security"
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 )
@@ -47,27 +49,42 @@ func NewAlluxioFileUtils(podName string, containerName string, namespace string,
 	}
 }
 
-// IsExist checks if the alluxioPath exists
-func (a AlluxioFileUtils) IsExist(alluxioPath string) (found bool, err error) {
+// exec with timeout
+func (a AlluxioFileUtils) exec(command []string, verbose bool) (stdout string, stderr string, err error) {
+	// redact sensitive info in command for printing
+	redactedCommand := securityutils.FilterCommand(command)
+
+	a.log.V(1).Info("Exec command start", "command", redactedCommand)
+	stdout, stderr, err = kubeclient.ExecCommandInContainerWithTimeout(a.podName, a.container, a.namespace, command, common.FileUtilsExecTimeout)
+	if err != nil {
+		err = errors.Wrapf(err, "error when executing command %v", redactedCommand)
+		return
+	}
+	a.log.V(1).Info("Exec command finished", "command", redactedCommand)
+
+	if verbose {
+		a.log.Info("Exec command succeeded", "command", redactedCommand, "stdout", stdout, "stderr", stderr)
+	}
+
+	return
+}
+
+// Check if the Alluxio is ready by running `alluxio fsadmin report` command
+func (a AlluxioFileUtils) Ready() (ready bool) {
 	var (
-		command = []string{"alluxio", "fs", "ls", alluxioPath}
+		command = []string{"alluxio", "fsadmin", "report"}
 		stdout  string
 		stderr  string
 	)
 
-	stdout, stderr, err = a.exec(command, true)
+	stdout, stderr, err := a.exec(command, true)
 	if err != nil {
-		if strings.Contains(stdout, "does not exist") {
-			err = nil
-		} else {
-			err = fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
-			return
-		}
-	} else {
-		found = true
+		a.log.Error(err, "AlluxioFileUtils.Ready() failed", "stdout", stdout, "stderr", stderr)
+		return
 	}
 
-	return
+	ready = true
+	return ready
 }
 
 // Get summary info of the Alluxio Engine
@@ -80,7 +97,37 @@ func (a AlluxioFileUtils) ReportSummary() (summary string, err error) {
 
 	stdout, stderr, err = a.exec(command, false)
 	if err != nil {
-		err = fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
+		a.log.Error(err, "AlluxioFileUtils.ReportSummary() failed", "stdout", stdout, "stderr", stderr)
+		return stdout, err
+	}
+	return stdout, err
+}
+
+// ReportMetrics get alluxio metrics by running `alluxio fsadmin report metrics` command
+func (a AlluxioFileUtils) ReportMetrics() (metrics string, err error) {
+	var (
+		command = []string{"alluxio", "fsadmin", "report", "metrics"}
+		stdout  string
+		stderr  string
+	)
+	stdout, stderr, err = a.exec(command, false)
+	if err != nil {
+		a.log.Error(err, "AlluxioFileUtils.ReportMetrics() failed", "stdout", stdout, "stderr", stderr)
+		return stdout, err
+	}
+	return stdout, err
+}
+
+// ReportCapacity get alluxio capacity info by running `alluxio fsadmin report capacity` command
+func (a AlluxioFileUtils) ReportCapacity() (report string, err error) {
+	var (
+		command = []string{"alluxio", "fsadmin", "report", "capacity"}
+		stdout  string
+		stderr  string
+	)
+	stdout, stderr, err = a.exec(command, false)
+	if err != nil {
+		a.log.Error(err, "AlluxioFileUtils.ReportCapacity() failed", "stdout", stdout, "stderr", stderr)
 		return stdout, err
 	}
 	return stdout, err
@@ -95,43 +142,15 @@ func (a AlluxioFileUtils) LoadMetadataWithoutTimeout(alluxioPath string) (err er
 	)
 
 	start := time.Now()
-	stdout, stderr, err = a.execWithoutTimeout(command, false)
+	stdout, stderr, err = a.exec(command, false)
 	duration := time.Since(start)
 	a.log.Info("Async Load Metadata took times to run", "period", duration)
 	if err != nil {
-		err = fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
+		a.log.Error(err, "AlluxioFileUtils.LoadMetadataWithoutTimeout() failed", "stdout", stdout, "stderr", stderr)
 		return
 	} else {
 		a.log.Info("Async Load Metadata finished", "stdout", stdout)
 	}
-	return
-}
-
-// LoadMetaData loads the metadata.
-func (a AlluxioFileUtils) LoadMetaData(alluxioPath string, sync bool) (err error) {
-	var (
-		// command = []string{"alluxio", "fs", "-Dalluxio.user.file.metadata.sync.interval=0", "ls", "-R", alluxioPath}
-		// command = []string{"alluxio", "fs", "-Dalluxio.user.file.metadata.sync.interval=0", "count", alluxioPath}
-		command []string
-		stdout  string
-		stderr  string
-	)
-
-	if sync {
-		command = []string{"alluxio", "fs", "-Dalluxio.user.file.metadata.sync.interval=0", "ls", "-R", alluxioPath}
-	} else {
-		command = []string{"alluxio", "fs", "ls", "-R", alluxioPath}
-	}
-
-	start := time.Now()
-	stdout, stderr, err = a.exec(command, false)
-	duration := time.Since(start)
-	a.log.Info("Load MetaData took times to run", "period", duration)
-	if err != nil {
-		err = fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
-		return
-	}
-
 	return
 }
 
@@ -176,27 +195,27 @@ func (a AlluxioFileUtils) QueryMetaDataInfoIntoFile(key KeyOfMetaDataFile, filen
 	)
 	stdout, stderr, err = a.exec(command, false)
 	if err != nil {
-		err = fmt.Errorf("execute command %v with  expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
+		a.log.Error(err, "AlluxioFileUtils.QueryMetaDataInfoIntoFile() failed", "stdout", stdout, "stderr", stderr)
+		return
 	} else {
 		value = strings.TrimPrefix(stdout, string(key)+": ")
 	}
 	return
 }
 
-func (a AlluxioFileUtils) Mkdir(alluxioPath string) (err error) {
+func (a AlluxioFileUtils) ExecMountScripts() error {
 	var (
-		command = []string{"alluxio", "fs", "mkdir", alluxioPath}
+		// Note: this script is mounted in master/statefulset.yaml
+		command = []string{"/etc/fluid/scripts/mount.sh"}
 		stdout  string
 		stderr  string
 	)
-
-	stdout, stderr, err = a.exec(command, false)
+	stdout, stderr, err := a.exec(command, true)
 	if err != nil {
-		err = fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
-		return
+		a.log.Error(err, "AlluxioFileUtils.ExecMountScripts() failed", "stdout", stdout, "stderr", stderr)
+		return err
 	}
-
-	return
+	return nil
 }
 
 func (a AlluxioFileUtils) Mount(alluxioPath string,
@@ -204,18 +223,6 @@ func (a AlluxioFileUtils) Mount(alluxioPath string,
 	options map[string]string,
 	readOnly bool,
 	shared bool) (err error) {
-
-	// exist, expectedErr := a.IsExist(alluxioPath)
-	// if expectedErr != nil {
-	// 	return expectedErr
-	// }
-
-	// if !exist {
-	// 	expectedErr = a.Mkdir(alluxioPath)
-	// 	if expectedErr != nil {
-	// 		return expectedErr
-	// 	}
-	// }
 
 	var (
 		command = []string{"alluxio", "fs", "mount"}
@@ -239,7 +246,7 @@ func (a AlluxioFileUtils) Mount(alluxioPath string,
 
 	stdout, stderr, err = a.exec(command, false)
 	if err != nil {
-		err = fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
+		a.log.Error(err, "AlluxioFileUtils.Mount() failed", "stdout", stdout, "stderr", stderr)
 		return
 	}
 
@@ -257,7 +264,7 @@ func (a AlluxioFileUtils) UnMount(alluxioPath string) (err error) {
 
 	stdout, stderr, err = a.exec(command, false)
 	if err != nil {
-		err = fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
+		a.log.Error(err, "AlluxioFileUtils.UnMount() failed", "stdout", stdout, "stderr", stderr)
 		return
 	}
 
@@ -273,7 +280,8 @@ func (a AlluxioFileUtils) IsMounted(alluxioPath string) (mounted bool, err error
 
 	stdout, stderr, err = a.exec(command, true)
 	if err != nil {
-		return mounted, fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
+		a.log.Error(err, "AlluxioFileUtils.IsMounted() failed", "stdout", stdout, "stderr", stderr)
+		return mounted, err
 	}
 
 	results := strings.Split(stdout, "\n")
@@ -287,15 +295,10 @@ func (a AlluxioFileUtils) IsMounted(alluxioPath string) (mounted bool, err error
 		}
 	}
 
-	// pattern := fmt.Sprintf(" on %s ", alluxioPath)
-	// if strings.Contains(stdout, pattern) {
-	// 	mounted = true
-	// }
-
 	return mounted, err
 }
 
-func (a AlluxioFileUtils) FindUnmountedAlluxioPaths(alluxioPaths []string) ([]string, error) {
+func (a AlluxioFileUtils) GetMountedAlluxioPaths() ([]string, error) {
 	var (
 		command = []string{"alluxio", "fs", "mount"}
 		stdout  string
@@ -304,7 +307,8 @@ func (a AlluxioFileUtils) FindUnmountedAlluxioPaths(alluxioPaths []string) ([]st
 
 	stdout, stderr, err := a.exec(command, true)
 	if err != nil {
-		return []string{}, fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
+		a.log.Error(err, "AlluxioFileUtils.GetMountedAlluxioPaths() failed", "stdout", stdout, "stderr", stderr)
+		return []string{}, err
 	}
 
 	results := strings.Split(stdout, "\n")
@@ -314,21 +318,169 @@ func (a AlluxioFileUtils) FindUnmountedAlluxioPaths(alluxioPaths []string) ([]st
 		mountedPaths = append(mountedPaths, fields[2])
 	}
 
+	return mountedPaths, err
+}
+
+func (a AlluxioFileUtils) FindUnmountedAlluxioPaths(alluxioPaths []string) ([]string, error) {
+	mountedPaths, err := a.GetMountedAlluxioPaths()
+	if err != nil {
+		return []string{}, err
+	}
+
 	return utils.SubtractString(alluxioPaths, mountedPaths), err
 }
 
-// Check if the Alluxio is ready by running `alluxio fsadmin report` command
-func (a AlluxioFileUtils) Ready() (ready bool) {
+// The count of the Alluxio Filesystem
+func (a AlluxioFileUtils) Count(alluxioPath string) (fileCount int64, folderCount int64, total int64, err error) {
 	var (
-		command = []string{"alluxio", "fsadmin", "report"}
+		command                          = []string{"alluxio", "fs", "count", alluxioPath}
+		stdout                           string
+		stderr                           string
+		ufileCount, ufolderCount, utotal int64
 	)
 
-	_, _, err := a.exec(command, true)
-	if err == nil {
-		ready = true
+	stdout, stderr, err = a.exec(command, false)
+	if err != nil {
+		a.log.Error(err, "AlluxioFileUtils.Count() failed", "stdout", stdout, "stderr", stderr)
+		return
 	}
 
-	return ready
+	// [File Count Folder Count Total Bytes 1152 4 154262709011]
+	str := strings.Split(stdout, "\n")
+
+	if len(str) != 2 {
+		err = fmt.Errorf("failed to parse %s in Count method", str)
+		return
+	}
+
+	data := strings.Fields(str[1])
+	if len(data) != 3 {
+		err = fmt.Errorf("failed to parse %s in Count method", data)
+		return
+	}
+
+	ufileCount, err = strconv.ParseInt(data[0], 10, 64)
+	if err != nil {
+		return
+	}
+
+	ufolderCount, err = strconv.ParseInt(data[1], 10, 64)
+	if err != nil {
+		return
+	}
+
+	utotal, err = strconv.ParseInt(data[2], 10, 64)
+	if err != nil {
+		return
+	}
+
+	if ufileCount < 0 || ufolderCount < 0 || utotal < 0 {
+		err = fmt.Errorf("the return value of Count method is negative")
+		return
+	}
+
+	return ufileCount, ufolderCount, utotal, err
+}
+
+// file count of the Alluxio Filesystem (except folder)
+// use "alluxio fsadmin report metrics" for better performance
+func (a AlluxioFileUtils) GetFileCount() (fileCount int64, err error) {
+	args := []string{"alluxio", "fsadmin", "report", "metrics", "|", "grep", "Master.FilesCompleted"}
+	var (
+		command = []string{"bash", "-c", strings.Join(args, " ")}
+		stdout  string
+		stderr  string
+	)
+
+	stdout, stderr, err = a.exec(command, false)
+	if err != nil {
+		a.log.Error(err, "AlluxioFileUtils.GetFileCount() failed", "stdout", stdout, "stderr", stderr)
+		return
+	}
+
+	// eg: Master.FilesCompleted  (Type: COUNTER, Value: 6,367,897)
+	outStrWithoutComma := strings.Replace(stdout, ",", "", -1)
+	matchExp := regexp.MustCompile(`\d+`)
+	fileCountStr := matchExp.FindString(outStrWithoutComma)
+	fileCount, err = strconv.ParseInt(fileCountStr, 10, 64)
+	if err != nil {
+		return
+	}
+	return fileCount, nil
+}
+
+func (a AlluxioFileUtils) MasterPodName() (masterPodName string, err error) {
+	var (
+		command = []string{"alluxio", "fsadmin", "report"}
+		stdout  string
+		stderr  string
+	)
+	stdout, stderr, err = a.exec(command, true)
+	if err != nil {
+		a.log.Error(err, "AlluxioFileUtils.MasterPodName() failed", "stdout", stdout, "stderr", stderr)
+		return a.podName, err
+	}
+
+	redactedCommand := securityutils.FilterCommand(command)
+	str := strings.Split(stdout, "\n")
+	if len(str) < 1 {
+		message := fmt.Sprintf("get wrong result when using command %v", redactedCommand)
+		return a.podName, errors.New(message)
+	}
+
+	data := strings.Fields(str[1])
+	if len(data) < 2 {
+		message := fmt.Sprintf("get wrong result when using command %v", redactedCommand)
+		return a.podName, errors.New(message)
+	}
+	address := strings.Split(data[2], ":")[0]
+
+	return address, nil
+}
+
+// /////////// Unused Alluxio File Util Functions //////////////
+// LoadMetaData loads the metadata.
+func (a AlluxioFileUtils) LoadMetaData(alluxioPath string, sync bool) (err error) {
+	var (
+		// command = []string{"alluxio", "fs", "-Dalluxio.user.file.metadata.sync.interval=0", "ls", "-R", alluxioPath}
+		// command = []string{"alluxio", "fs", "-Dalluxio.user.file.metadata.sync.interval=0", "count", alluxioPath}
+		command []string
+		stdout  string
+		stderr  string
+	)
+
+	if sync {
+		command = []string{"alluxio", "fs", "-Dalluxio.user.file.metadata.sync.interval=0", "ls", "-R", alluxioPath}
+	} else {
+		command = []string{"alluxio", "fs", "ls", "-R", alluxioPath}
+	}
+
+	start := time.Now()
+	stdout, stderr, err = a.exec(command, false)
+	duration := time.Since(start)
+	a.log.Info("Load MetaData took times to run", "period", duration)
+	if err != nil {
+		a.log.Error(err, "AlluxioFileUtils.LoadMetaData() failed", "stdout", stdout, "stderr", stderr)
+		return
+	}
+
+	return
+}
+
+func (a AlluxioFileUtils) Mkdir(alluxioPath string) (err error) {
+	var (
+		command = []string{"alluxio", "fs", "mkdir", alluxioPath}
+		stdout  string
+		stderr  string
+	)
+
+	stdout, stderr, err = a.exec(command, false)
+	if err != nil {
+		a.log.Error(err, "AlluxioFileUtils.Mkdir() failed", "stdout", stdout, "stderr", stderr)
+		return
+	}
+
+	return
 }
 
 func (a AlluxioFileUtils) Du(alluxioPath string) (ufs int64, cached int64, cachedPercentage string, err error) {
@@ -340,7 +492,7 @@ func (a AlluxioFileUtils) Du(alluxioPath string) (ufs int64, cached int64, cache
 
 	stdout, stderr, err = a.exec(command, false)
 	if err != nil {
-		err = fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
+		a.log.Error(err, "AlluxioFileUtils.Du() failed", "stdout", stdout, "stderr", stderr)
 		return
 	}
 	str := strings.Split(stdout, "\n")
@@ -370,172 +522,4 @@ func (a AlluxioFileUtils) Du(alluxioPath string) (ufs int64, cached int64, cache
 	cachedPercentage = strings.TrimRight(cachedPercentage, ")")
 
 	return
-}
-
-// The count of the Alluxio Filesystem
-func (a AlluxioFileUtils) Count(alluxioPath string) (fileCount int64, folderCount int64, total int64, err error) {
-	var (
-		command                          = []string{"alluxio", "fs", "count", alluxioPath}
-		stdout                           string
-		stderr                           string
-		ufileCount, ufolderCount, utotal uint64
-	)
-
-	stdout, stderr, err = a.execWithoutTimeout(command, false)
-	if err != nil {
-		err = fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
-		return
-	}
-
-	// [File Count Folder Count Total Bytes 1152 4 154262709011]
-	str := strings.Split(stdout, "\n")
-
-	if len(str) != 2 {
-		err = fmt.Errorf("failed to parse %s in Count method", str)
-		return
-	}
-
-	data := strings.Fields(str[1])
-	if len(data) != 3 {
-		err = fmt.Errorf("failed to parse %s in Count method", data)
-		return
-	}
-
-	ufileCount, err = strconv.ParseUint(data[0], 10, 64)
-	if err != nil {
-		return
-	}
-
-	ufolderCount, err = strconv.ParseUint(data[1], 10, 64)
-	if err != nil {
-		return
-	}
-
-	utotal, err = strconv.ParseUint(data[2], 10, 64)
-	if err != nil {
-		return
-	}
-
-	return int64(ufileCount), int64(ufolderCount), int64(utotal), err
-}
-
-// file count of the Alluxio Filesystem (except folder)
-// use "alluxio fsadmin report metrics" for better performance
-func (a AlluxioFileUtils) GetFileCount() (fileCount int64, err error) {
-	args := []string{"alluxio", "fsadmin", "report", "metrics", "|", "grep", "Master.FilesCompleted"}
-	var (
-		command = []string{"bash", "-c", strings.Join(args, " ")}
-		stdout  string
-		stderr  string
-	)
-
-	stdout, stderr, err = a.execWithoutTimeout(command, false)
-	if err != nil {
-		err = fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
-		return
-	}
-
-	// eg: Master.FilesCompleted  (Type: COUNTER, Value: 6,367,897)
-	outStrWithoutComma := strings.Replace(stdout, ",", "", -1)
-	matchExp := regexp.MustCompile(`\d+`)
-	fileCountStr := matchExp.FindString(outStrWithoutComma)
-	fileCount, err = strconv.ParseInt(fileCountStr, 10, 64)
-	if err != nil {
-		return
-	}
-	return fileCount, nil
-}
-
-// ReportMetrics get alluxio metrics by running `alluxio fsadmin report metrics` command
-func (a AlluxioFileUtils) ReportMetrics() (metrics string, err error) {
-	var (
-		command = []string{"alluxio", "fsadmin", "report", "metrics"}
-		stdout  string
-		stderr  string
-	)
-	stdout, stderr, err = a.exec(command, false)
-	if err != nil {
-		err = fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
-		return stdout, err
-	}
-	return stdout, err
-}
-
-// ReportCapacity get alluxio capacity info by running `alluxio fsadmin report capacity` command
-func (a AlluxioFileUtils) ReportCapacity() (report string, err error) {
-	var (
-		command = []string{"alluxio", "fsadmin", "report", "capacity"}
-		stdout  string
-		stderr  string
-	)
-	stdout, stderr, err = a.exec(command, false)
-	if err != nil {
-		err = fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
-		return stdout, err
-	}
-	return stdout, err
-}
-
-// exec with timeout
-func (a AlluxioFileUtils) exec(command []string, verbose bool) (stdout string, stderr string, err error) {
-	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*1500)
-	ch := make(chan string, 1)
-	defer cancel()
-
-	go func() {
-		stdout, stderr, err = a.execWithoutTimeout(command, verbose)
-		ch <- "done"
-	}()
-
-	select {
-	case <-ch:
-		a.log.Info("execute in time", "command", command)
-	case <-ctx.Done():
-		err = fmt.Errorf("timeout when executing %v", command)
-	}
-
-	return
-}
-
-// execWithoutTimeout
-func (a AlluxioFileUtils) execWithoutTimeout(command []string, verbose bool) (stdout string, stderr string, err error) {
-	stdout, stderr, err = kubeclient.ExecCommandInContainer(a.podName, a.container, a.namespace, command)
-	if err != nil {
-		a.log.Info("Stdout", "Command", command, "Stdout", stdout)
-		a.log.Error(err, "Failed", "Command", command, "FailedReason", stderr)
-		return
-	}
-	if verbose {
-		a.log.Info("Stdout", "Command", command, "Stdout", stdout)
-	}
-
-	return
-}
-
-func (a AlluxioFileUtils) MasterPodName() (masterPodName string, err error) {
-	var (
-		command = []string{"alluxio", "fsadmin", "report"}
-		stdout  string
-		stderr  string
-	)
-	stdout, stderr, err = a.exec(command, true)
-	if err != nil {
-		err = fmt.Errorf("execute command %v with expectedErr: %v stdout %s and stderr %s", command, err, stdout, stderr)
-		return a.podName, err
-	}
-
-	str := strings.Split(stdout, "\n")
-	if len(str) < 1 {
-		message := fmt.Sprintf("get wrong result when using command %v", command)
-		return a.podName, errors.New(message)
-	}
-
-	data := strings.Fields(str[1])
-	if len(data) < 2 {
-		message := fmt.Sprintf("get wrong result when using command %v", command)
-		return a.podName, errors.New(message)
-	}
-	address := strings.Split(data[2], ":")[0]
-
-	return address, nil
 }

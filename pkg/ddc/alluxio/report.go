@@ -1,3 +1,19 @@
+/*
+Copyright 2021 The Fluid Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package alluxio
 
 import (
@@ -6,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/alluxio/operations"
+	ddctypes "github.com/fluid-cloudnative/fluid/pkg/ddc/types"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 )
 
@@ -17,21 +34,21 @@ func (e *AlluxioEngine) GetReportSummary() (summary string, err error) {
 }
 
 // parse alluxio report summary to cacheStates
-func (e AlluxioEngine) ParseReportSummary(s string) cacheStates {
+func (e AlluxioEngine) parseReportSummary(s string) cacheStates {
 
 	var states cacheStates
 
 	strs := strings.Split(s, "\n")
 	for _, str := range strs {
 		str = strings.TrimSpace(str)
-		if strings.HasPrefix(str, SUMMARY_PREFIX_TOTAL_CAPACITY) {
-			totalCacheCapacityAlluxio, _ := utils.FromHumanSize(strings.TrimPrefix(str, SUMMARY_PREFIX_TOTAL_CAPACITY))
+		if strings.HasPrefix(str, ddctypes.SummaryPrefixTotalCapacity) {
+			totalCacheCapacityAlluxio, _ := utils.FromHumanSize(strings.TrimPrefix(str, ddctypes.SummaryPrefixTotalCapacity))
 			// Convert Alluxio's binary byte units to Fluid's binary byte units
 			// e.g. 10KB -> 10KiB, 2GB -> 2GiB
 			states.cacheCapacity = utils.BytesSize(float64(totalCacheCapacityAlluxio))
 		}
-		if strings.HasPrefix(str, SUMMARY_PREFIX_USED_CAPACITY) {
-			usedCacheCapacityAlluxio, _ := utils.FromHumanSize(strings.TrimPrefix(str, SUMMARY_PREFIX_USED_CAPACITY))
+		if strings.HasPrefix(str, ddctypes.SummaryPrefixUsedCapacity) {
+			usedCacheCapacityAlluxio, _ := utils.FromHumanSize(strings.TrimPrefix(str, ddctypes.SummaryPrefixUsedCapacity))
 			// Convert Alluxio's binary byte units to Fluid's binary byte units
 			// e.g. 10KB -> 10KiB, 2GB -> 2GiB
 			states.cached = utils.BytesSize(float64(usedCacheCapacityAlluxio))
@@ -57,32 +74,32 @@ func (e AlluxioEngine) ParseReportMetric(metrics string, cacheHitStates, lastCac
 		str = strings.TrimSpace(str)
 		counterPattern := regexp.MustCompile(`\(Type:\sCOUNTER,\sValue:\s(.*)\)`)
 		gaugePattern := regexp.MustCompile(`\(Type:\sGAUGE,\sValue:\s(.*)/MIN\)`)
-		if strings.HasPrefix(str, METRICS_PREFIX_BYTES_READ_LOCAL) {
+		if strings.HasPrefix(str, metricsPrefixBytesReadLocal) {
 			cacheHitStates.bytesReadLocal, _ = utils.FromHumanSize(counterPattern.FindStringSubmatch(str)[1])
 			continue
 		}
 
-		if strings.HasPrefix(str, METRICS_PREFIX_BYTES_READ_REMOTE) {
+		if strings.HasPrefix(str, metricsPrefixBytesReadRemote) {
 			cacheHitStates.bytesReadRemote, _ = utils.FromHumanSize(counterPattern.FindStringSubmatch(str)[1])
 			continue
 		}
 
-		if strings.HasPrefix(str, METRICS_PREFIX_BYTES_READ_UFS_ALL) {
+		if strings.HasPrefix(str, metricsPrefixBytesReadUfsAll) {
 			cacheHitStates.bytesReadUfsAll, _ = utils.FromHumanSize(counterPattern.FindStringSubmatch(str)[1])
 			continue
 		}
 
-		if strings.HasPrefix(str, METRICS_PREFIX_BYTES_READ_LOCAL_THROUGHPUT) {
+		if strings.HasPrefix(str, metricsPrefixBytesReadLocalThroughput) {
 			localThroughput, _ = utils.FromHumanSize(gaugePattern.FindStringSubmatch(str)[1])
 			continue
 		}
 
-		if strings.HasPrefix(str, METRICS_PREFIX_BYTES_READ_REMOTE_THROUGHPUT) {
+		if strings.HasPrefix(str, metricsPrefixBytesReadRemoteThroughput) {
 			remoteThroughput, _ = utils.FromHumanSize(gaugePattern.FindStringSubmatch(str)[1])
 			continue
 		}
 
-		if strings.HasPrefix(str, METRICS_PREFIX_BYTES_READ_UFS_THROUGHPUT) {
+		if strings.HasPrefix(str, metricsPrefixBytesReadUfsThroughput) {
 			ufsThroughput, _ = utils.FromHumanSize(gaugePattern.FindStringSubmatch(str)[1])
 		}
 	}

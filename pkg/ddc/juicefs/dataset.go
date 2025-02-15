@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Fluid Authors.
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,8 +18,9 @@ package juicefs
 
 import (
 	"context"
-	"k8s.io/apimachinery/pkg/types"
 	"reflect"
+
+	"k8s.io/apimachinery/pkg/types"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/util/retry"
@@ -48,9 +49,22 @@ func (j *JuiceFSEngine) UpdateDatasetStatus(phase datav1alpha1.DatasetPhase) (er
 
 		switch phase {
 		case datav1alpha1.BoundDatasetPhase:
+			// Stores dataset mount info
 			if len(datasetToUpdate.Status.Mounts) == 0 {
 				datasetToUpdate.Status.Mounts = datasetToUpdate.Spec.Mounts
 			}
+
+			// Stores binding relation between dataset and runtime
+			if len(datasetToUpdate.Status.Runtimes) == 0 {
+				datasetToUpdate.Status.Runtimes = []datav1alpha1.Runtime{}
+			}
+
+			datasetToUpdate.Status.Runtimes = utils.AddRuntimesIfNotExist(datasetToUpdate.Status.Runtimes, utils.NewRuntime(j.name,
+				j.namespace,
+				common.AccelerateCategory,
+				common.JuiceFSRuntime,
+				j.runtime.Spec.Replicas))
+
 			cond = utils.NewDatasetCondition(datav1alpha1.DatasetReady, datav1alpha1.DatasetReadyReason,
 				"The ddc runtime is ready.",
 				corev1.ConditionTrue)
@@ -64,7 +78,9 @@ func (j *JuiceFSEngine) UpdateDatasetStatus(phase datav1alpha1.DatasetPhase) (er
 				corev1.ConditionFalse)
 		}
 
-		datasetToUpdate.Status.Phase = phase
+		if datasetToUpdate.Status.Phase != datav1alpha1.DataMigrating {
+			datasetToUpdate.Status.Phase = phase
+		}
 		datasetToUpdate.Status.Conditions = utils.UpdateDatasetCondition(datasetToUpdate.Status.Conditions,
 			cond)
 
@@ -106,16 +122,6 @@ func (j *JuiceFSEngine) UpdateCacheOfDataset() (err error) {
 		datasetToUpdate := dataset.DeepCopy()
 
 		datasetToUpdate.Status.CacheStates = runtime.Status.CacheStates
-
-		if len(datasetToUpdate.Status.Runtimes) == 0 {
-			datasetToUpdate.Status.Runtimes = []datav1alpha1.Runtime{}
-		}
-
-		datasetToUpdate.Status.Runtimes = utils.AddRuntimesIfNotExist(datasetToUpdate.Status.Runtimes, utils.NewRuntime(j.name,
-			j.namespace,
-			common.AccelerateCategory,
-			common.JuiceFSRuntime,
-			j.runtime.Spec.Replicas))
 
 		j.Log.Info("the dataset status", "status", datasetToUpdate.Status)
 

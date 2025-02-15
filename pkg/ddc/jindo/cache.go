@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/jindo/operations"
+	ddctypes "github.com/fluid-cloudnative/fluid/pkg/ddc/types"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 )
@@ -37,14 +38,14 @@ func (e *JindoEngine) queryCacheStatus() (states cacheStates, err error) {
 	strs := strings.Split(summary, "\n")
 	for _, str := range strs {
 		str = strings.TrimSpace(str)
-		if strings.HasPrefix(str, SUMMARY_PREFIX_TOTAL_CAPACITY) {
-			totalCacheCapacityJindo, _ := utils.FromHumanSize(strings.TrimPrefix(str, SUMMARY_PREFIX_TOTAL_CAPACITY))
+		if strings.HasPrefix(str, ddctypes.SummaryPrefixTotalCapacity) {
+			totalCacheCapacityJindo, _ := utils.FromHumanSize(strings.TrimPrefix(str, ddctypes.SummaryPrefixTotalCapacity))
 			// Convert JindoFS's binary byte units to Fluid's binary byte units
 			// e.g. 10KB -> 10KiB, 2GB -> 2GiB
 			states.cacheCapacity = utils.BytesSize(float64(totalCacheCapacityJindo))
 		}
-		if strings.HasPrefix(str, SUMMARY_PREFIX_USED_CAPACITY) {
-			usedCacheCapacityJindo, _ := utils.FromHumanSize(strings.TrimPrefix(str, SUMMARY_PREFIX_USED_CAPACITY))
+		if strings.HasPrefix(str, ddctypes.SummaryPrefixUsedCapacity) {
+			usedCacheCapacityJindo, _ := utils.FromHumanSize(strings.TrimPrefix(str, ddctypes.SummaryPrefixUsedCapacity))
 			// Convert JindoFS's binary byte units to Fluid's binary byte units
 			// e.g. 10KB -> 10KiB, 2GB -> 2GiB
 			states.cached = utils.BytesSize(float64(usedCacheCapacityJindo))
@@ -58,7 +59,7 @@ func (e *JindoEngine) queryCacheStatus() (states cacheStates, err error) {
 	}
 
 	// `dataset.Status.UfsTotal` probably haven't summed, in which case we won't compute cache percentage
-	if dataset.Status.UfsTotal != "" && dataset.Status.UfsTotal != METADATA_SYNC_NOT_DONE_MSG {
+	if dataset.Status.UfsTotal != "" && dataset.Status.UfsTotal != MetadataSyncNotDoneMsg {
 		usedInBytes, _ := utils.FromHumanSize(states.cached)
 		ufsTotalInBytes, _ := utils.FromHumanSize(dataset.Status.UfsTotal)
 		// jindofs calculate cached storage bytesize with block sum, so percentage will be over 100% if totally cached

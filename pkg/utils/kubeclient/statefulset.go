@@ -1,7 +1,25 @@
+/*
+Copyright 2023 The Fluid Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package kubeclient
 
 import (
 	"context"
+	"k8s.io/client-go/util/retry"
+	"reflect"
 	"regexp"
 	"strconv"
 
@@ -15,6 +33,26 @@ import (
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 )
+
+// ScaleStatefulSet scale the statefulset replicas
+func ScaleStatefulSet(client client.Client, name string, namespace string, replicas int32) error {
+	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		workers, err := GetStatefulSet(client, name, namespace)
+		if err != nil {
+			return err
+		}
+		workersToUpdate := workers.DeepCopy()
+		workersToUpdate.Spec.Replicas = &replicas
+		if !reflect.DeepEqual(workers, workersToUpdate) {
+			err = client.Update(context.TODO(), workersToUpdate)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return err
+}
 
 // GetStatefulset gets the statefulset by name and namespace
 func GetStatefulSet(c client.Client, name string, namespace string) (master *appsv1.StatefulSet, err error) {
@@ -94,6 +132,10 @@ func isMemberOf(sts *appsv1.StatefulSet, pod *v1.Pod) bool {
 
 // GetPhaseFromStatefulset gets the phase from statefulset
 func GetPhaseFromStatefulset(replicas int32, sts appsv1.StatefulSet) (phase datav1alpha1.RuntimePhase) {
+	if replicas == 0 {
+		phase = datav1alpha1.RuntimePhaseReady
+		return
+	}
 	if sts.Status.ReadyReplicas > 0 {
 		if replicas == sts.Status.ReadyReplicas {
 			phase = datav1alpha1.RuntimePhaseReady

@@ -6,7 +6,6 @@
 *.so
 *.dylib
 *.jar
-!hack/sdk/swagger-codegen-cli.jar
 bin
 
 # Test binary, build with `go test -c`
@@ -34,5 +33,8 @@ cmd/*/start.sh
 
 # client sdk
 openapi-gen
-sdk
 **/__debug_bin
+
+# debug related
+**/__debug_bin
+**/__pycache__

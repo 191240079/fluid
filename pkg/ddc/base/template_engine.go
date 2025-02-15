@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,8 +21,9 @@ import (
 	"os"
 	"time"
 
-	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+
+	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,7 +32,7 @@ import (
 const (
 	syncRetryDurationEnv string = "FLUID_SYNC_RETRY_DURATION"
 
-	defaultSyncRetryDuration time.Duration = time.Duration(60 * time.Second)
+	defaultSyncRetryDuration time.Duration = time.Duration(5 * time.Second)
 )
 
 // Use compiler to check if the struct implements all the interface
@@ -81,9 +83,13 @@ func (t *TemplateEngine) ID() string {
 	return t.Id
 }
 
-//Shutdown and clean up the engine
+// Shutdown and clean up the engine
 func (t *TemplateEngine) Shutdown() error {
 	return t.Implement.Shutdown()
+}
+
+func (t *TemplateEngine) Validate(ctx cruntime.ReconcileRequestContext) (err error) {
+	return t.Implement.Validate(ctx)
 }
 
 func getSyncRetryDuration() (d *time.Duration, err error) {

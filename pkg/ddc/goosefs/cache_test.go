@@ -24,9 +24,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	. "github.com/agiledragon/gomonkey"
+	. "github.com/agiledragon/gomonkey/v2"
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	. "github.com/smartystreets/goconvey/convey"
@@ -267,7 +266,7 @@ func TestInvokeCleanCache(t *testing.T) {
 			Client:    fakeClient,
 			namespace: testCase.namespace,
 			name:      testCase.name,
-			Log:       log.NullLogger{},
+			Log:       fake.NullLogger(),
 		}
 		err := engine.invokeCleanCache("")
 		isErr := err != nil
@@ -277,9 +276,7 @@ func TestInvokeCleanCache(t *testing.T) {
 	}
 }
 
-//
 // $ goosefs fsadmin report summary
-//
 func mockGooseFSReportSummary() string {
 	s := `GooseFS cluster summary: 
 	Master Address: 172.18.0.2:20000

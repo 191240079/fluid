@@ -17,11 +17,18 @@ limitations under the License.
 package base
 
 import (
+	"github.com/fluid-cloudnative/fluid/pkg/metrics"
 	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
 )
 
 // Setup the ddc engine
 func (b *TemplateEngine) Setup(ctx cruntime.ReconcileRequestContext) (ready bool, err error) {
+	defer func() {
+		if err != nil {
+			metrics.GetOrCreateRuntimeMetrics(ctx.Runtime.GetObjectKind().GroupVersionKind().Kind, ctx.Namespace, ctx.Name).SetupErrorInc()
+		}
+	}()
+
 	var (
 		shouldSetupMaster  bool
 		masterReady        bool

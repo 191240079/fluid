@@ -12,7 +12,6 @@
 {{- $shortCircuitEnabled := .Values.shortCircuit.enabled }}
 {{- $needDomainSocketVolume := and $shortCircuitEnabled (eq .Values.shortCircuit.policy "uuid") }}
 {{- $hostNetwork := .Values.worker.hostNetwork }}
-{{- $hostPID := .Values.worker.hostPID }}
 
 apiVersion: apps/v1
 kind: StatefulSet
@@ -24,8 +23,18 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
     role: alluxio-worker
-    fluid.io/dataset: {{ .Release.Namespace }}-{{ .Release.Name }}
+    fluid.io/dataset: {{ .Values.ownerDatasetId }}
     fluid.io/dataset-placement: {{ .Values.placement }}
+    {{- include "library.fluid.labels" . | nindent 4 }}
+  ownerReferences:
+  {{- if .Values.owner.enabled }}
+  - apiVersion: {{ .Values.owner.apiVersion }}
+    blockOwnerDeletion: {{ .Values.owner.blockOwnerDeletion }}
+    controller: {{ .Values.owner.controller }}
+    kind: {{ .Values.owner.kind }}
+    name: {{ .Values.owner.name }}
+    uid: {{ .Values.owner.uid }}
+  {{- end }}
 spec:
   selector:
     matchLabels:
@@ -34,23 +43,44 @@ spec:
       role: alluxio-worker
   serviceName: {{ template "alluxio.fullname" . }}-worker
   replicas: {{ .Values.worker.replicaCount }}
+  podManagementPolicy: {{ .Values.worker.podManagementPolicy }}
   template:
     metadata:
+      annotations:
+        sidecar.istio.io/inject: "false"
+      {{- if .Values.worker.annotations }}
+      {{- range $key, $val := .Values.worker.annotations }}
+        {{ $key | quote }}: {{ $val | quote }}
+      {{- end }}
+      {{- end }}
       labels:
+        sidecar.istio.io/inject: "false"
         app: {{ template "alluxio.name" . }}
         chart: {{ template "alluxio.chart" . }}
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
         role: alluxio-worker
-        fluid.io/dataset: {{ .Release.Namespace }}-{{ .Release.Name }}
+        fluid.io/dataset: {{ .Values.ownerDatasetId }}
         fluid.io/dataset-placement: {{ .Values.placement }}
+        {{- include "library.fluid.labels" . | nindent 8 }}
+        {{- if .Values.worker.labels }}
+        {{- range $key, $val := .Values.worker.labels }}
+        {{ $key | quote }}: {{ $val | quote }}
+        {{- end }}
+        {{- end }}
     spec:
+      {{- if .Values.worker.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.worker.imagePullSecrets | nindent 8 }}
+      {{- else if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
       enableServiceLinks: false
+      {{- if .Values.worker.hostNetwork }}
       hostNetwork: {{ $hostNetwork }}
-      hostPID: {{ .Values.worker.hostPID }}
-      dnsPolicy: {{ .Values.worker.dnsPolicy | default ($hostNetwork | ternary "ClusterFirstWithHostNet" "ClusterFirst") }}
-      securityContext:
-        fsGroup: {{ .Values.fsGroup }}
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
       nodeSelector:
       {{- if .Values.worker.nodeSelector }}
 {{ toYaml .Values.worker.nodeSelector | trim | indent 8  }}
@@ -158,6 +188,9 @@ spec:
               {{- range .Values.ufsVolumes }}
             - mountPath: {{ .containerPath }}
               name: {{ .name }}
+              {{- if .subPath }}
+              subPath: {{ .subPath }}
+              {{- end }}
               {{- end }}
             {{- end }}
             {{- if .Values.secrets -}}
@@ -171,6 +204,9 @@ spec:
             {{- if .Values.mounts -}}
 {{- include "alluxio.worker.otherVolumeMounts" . }}
             {{- end }}
+            {{- if .Values.worker.volumeMounts }}
+{{ toYaml .Values.worker.volumeMounts | indent 12 }}
+           {{- end }}
         - name: alluxio-job-worker
           image: {{ .Values.image }}:{{ .Values.imageTag }}
           securityContext:
@@ -240,6 +276,9 @@ spec:
               {{- range .Values.ufsVolumes }}
             - mountPath: {{ .containerPath }}
               name: {{ .name }}
+              {{- if .subPath }}
+              subPath: {{ .subPath }}
+              {{- end }}
               {{- end }}
             {{- end }}
             {{- if .Values.secrets }}
@@ -252,6 +291,9 @@ spec:
             {{- end }}
             {{- if .Values.mounts }}
 {{- include "alluxio.worker.otherVolumeMounts" . }}
+            {{- end }}
+            {{- if .Values.worker.volumeMounts }}
+{{ toYaml .Values.worker.volumeMounts | indent 12 }}
             {{- end }}
       restartPolicy: Always
       volumes:
@@ -317,4 +359,7 @@ spec:
           persistentVolumeClaim:
             claimName: "{{ .name }}"
           {{- end }}
+        {{- end }}
+        {{- if .Values.worker.volumes }}
+{{ toYaml .Values.worker.volumes | indent 8 }}
         {{- end }}

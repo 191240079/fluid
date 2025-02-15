@@ -1,19 +1,25 @@
 /*
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
+
     http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package goosefs
 
 import (
 	"fmt"
+
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 
 	"github.com/go-logr/logr"
@@ -23,6 +29,7 @@ import (
 	"github.com/fluid-cloudnative/fluid/pkg/ctrl"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
+	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
 )
 
@@ -33,13 +40,14 @@ type GooseFSEngine struct {
 	name        string
 	namespace   string
 	runtimeType string
+	engineImpl  string
 	Log         logr.Logger
 	client.Client
 	// gracefulShutdownLimits is the limit for the system to forcibly clean up.
 	gracefulShutdownLimits int32
 	retryShutdown          int32
 	initImage              string
-	MetadataSyncDoneCh     chan MetadataSyncResult
+	MetadataSyncDoneCh     chan base.MetadataSyncResult
 	runtimeInfo            base.RuntimeInfoInterface
 	UnitTest               bool
 	lastCacheHitStates     *cacheHitStates
@@ -56,6 +64,7 @@ func Build(id string, ctx cruntime.ReconcileRequestContext) (base.Engine, error)
 		Recorder:               ctx.Recorder,
 		Log:                    ctx.Log,
 		runtimeType:            ctx.RuntimeType,
+		engineImpl:             ctx.EngineImpl,
 		gracefulShutdownLimits: 5,
 		retryShutdown:          0,
 		MetadataSyncDoneCh:     nil,
@@ -78,6 +87,7 @@ func Build(id string, ctx cruntime.ReconcileRequestContext) (base.Engine, error)
 	if err != nil {
 		return nil, fmt.Errorf("engine %s failed to get runtime info", ctx.Name)
 	}
+	engine.runtimeInfo = runtimeInfo
 
 	// Build the helper
 	engine.Helper = ctrl.BuildHelper(runtimeInfo, ctx.Client, engine.Log)
@@ -86,4 +96,10 @@ func Build(id string, ctx cruntime.ReconcileRequestContext) (base.Engine, error)
 
 	err = kubeclient.EnsureNamespace(ctx.Client, ctx.Namespace)
 	return template, err
+}
+
+// Precheck checks if the given key can be found in the current runtime types
+func Precheck(client client.Client, key types.NamespacedName) (found bool, err error) {
+	var obj datav1alpha1.GooseFSRuntime
+	return utils.CheckObject(client, key, &obj)
 }

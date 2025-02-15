@@ -7,17 +7,25 @@ Resource Types:
 <ul><li>
 <a href="#data.fluid.io/v1alpha1.AlluxioRuntime">AlluxioRuntime</a>
 </li><li>
-<a href="#data.fluid.io/v1alpha1.DataBackup">DataBackup</a>
-</li><li>
 <a href="#data.fluid.io/v1alpha1.DataLoad">DataLoad</a>
 </li><li>
+<a href="#data.fluid.io/v1alpha1.DataMigrate">DataMigrate</a>
+</li><li>
+<a href="#data.fluid.io/v1alpha1.DataProcess">DataProcess</a>
+</li><li>
 <a href="#data.fluid.io/v1alpha1.Dataset">Dataset</a>
+</li><li>
+<a href="#data.fluid.io/v1alpha1.EFCRuntime">EFCRuntime</a>
 </li><li>
 <a href="#data.fluid.io/v1alpha1.GooseFSRuntime">GooseFSRuntime</a>
 </li><li>
 <a href="#data.fluid.io/v1alpha1.JindoRuntime">JindoRuntime</a>
 </li><li>
 <a href="#data.fluid.io/v1alpha1.JuiceFSRuntime">JuiceFSRuntime</a>
+</li><li>
+<a href="#data.fluid.io/v1alpha1.ThinRuntime">ThinRuntime</a>
+</li><li>
+<a href="#data.fluid.io/v1alpha1.VineyardRuntime">VineyardRuntime</a>
 </li></ul>
 <h3 id="data.fluid.io/v1alpha1.AlluxioRuntime">AlluxioRuntime
 </h3>
@@ -37,9 +45,7 @@ Resource Types:
 <code>apiVersion</code></br>
 string</td>
 <td>
-<code>
-data.fluid.io/v1alpha1
-</code>
+<code>data.fluid.io/v1alpha1</code>
 </td>
 </tr>
 <tr>
@@ -53,7 +59,7 @@ string
 <td>
 <code>metadata</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#objectmeta-v1-meta">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#objectmeta-v1-meta">
 Kubernetes meta/v1.ObjectMeta
 </a>
 </em>
@@ -281,6 +287,62 @@ For now, only &ldquo;hdfs-site.xml&rdquo; and &ldquo;core-site.xml&rdquo; are su
 of the file as the value.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>volumes</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volume-v1-core">
+[]Kubernetes core/v1.Volume
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Volumes is the list of Kubernetes volumes that can be mounted by the alluxio runtime components and/or fuses.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to Alluxio&rsquo;s pods</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>management</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.RuntimeManagement">
+RuntimeManagement
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>RuntimeManagement defines policies when managing the runtime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullSecrets</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#localobjectreference-v1-core">
+[]Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ImagePullSecrets that will be used to pull images</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -290,115 +352,6 @@ of the file as the value.</p>
 <em>
 <a href="#data.fluid.io/v1alpha1.RuntimeStatus">
 RuntimeStatus
-</a>
-</em>
-</td>
-<td>
-</td>
-</tr>
-</tbody>
-</table>
-<h3 id="data.fluid.io/v1alpha1.DataBackup">DataBackup
-</h3>
-<p>
-<p>DataBackup is the Schema for the backup API</p>
-</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>
-<code>apiVersion</code></br>
-string</td>
-<td>
-<code>
-data.fluid.io/v1alpha1
-</code>
-</td>
-</tr>
-<tr>
-<td>
-<code>kind</code></br>
-string
-</td>
-<td><code>DataBackup</code></td>
-</tr>
-<tr>
-<td>
-<code>metadata</code></br>
-<em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#objectmeta-v1-meta">
-Kubernetes meta/v1.ObjectMeta
-</a>
-</em>
-</td>
-<td>
-Refer to the Kubernetes API documentation for the fields of the
-<code>metadata</code> field.
-</td>
-</tr>
-<tr>
-<td>
-<code>spec</code></br>
-<em>
-<a href="#data.fluid.io/v1alpha1.DataBackupSpec">
-DataBackupSpec
-</a>
-</em>
-</td>
-<td>
-<br/>
-<br/>
-<table>
-<tr>
-<td>
-<code>dataset</code></br>
-<em>
-string
-</em>
-</td>
-<td>
-<p>Dataset defines the target dataset of the DataBackup</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>backupPath</code></br>
-<em>
-string
-</em>
-</td>
-<td>
-<p>BackupPath defines the target path to save data of the DataBackup</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>runAs</code></br>
-<em>
-<a href="#data.fluid.io/v1alpha1.User">
-User
-</a>
-</em>
-</td>
-<td>
-<p>Manage the user to run Alluxio DataBackup</p>
-</td>
-</tr>
-</table>
-</td>
-</tr>
-<tr>
-<td>
-<code>status</code></br>
-<em>
-<a href="#data.fluid.io/v1alpha1.DataBackupStatus">
-DataBackupStatus
 </a>
 </em>
 </td>
@@ -425,9 +378,7 @@ DataBackupStatus
 <code>apiVersion</code></br>
 string</td>
 <td>
-<code>
-data.fluid.io/v1alpha1
-</code>
+<code>data.fluid.io/v1alpha1</code>
 </td>
 </tr>
 <tr>
@@ -441,7 +392,7 @@ string
 <td>
 <code>metadata</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#objectmeta-v1-meta">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#objectmeta-v1-meta">
 Kubernetes meta/v1.ObjectMeta
 </a>
 </em>
@@ -512,6 +463,137 @@ map[string]string
 <p>Options specifies the extra dataload properties for runtime</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<p>PodMetadata defines labels and annotations that will be propagated to DataLoad pods</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>affinity</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#affinity-v1-core">
+Kubernetes core/v1.Affinity
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Affinity defines affinity for DataLoad pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>tolerations</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#toleration-v1-core">
+[]Kubernetes core/v1.Toleration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Tolerations defines tolerations for DataLoad pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>nodeSelector</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NodeSelector defiens node selector for DataLoad pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>schedulerName</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SchedulerName sets the scheduler to be used for DataLoad pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>policy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.Policy">
+Policy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>including Once, Cron, OnEvent</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>schedule</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The schedule in Cron format, only set when policy is cron, see <a href="https://en.wikipedia.org/wiki/Cron">https://en.wikipedia.org/wiki/Cron</a>.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>runAfter</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.OperationRef">
+OperationRef
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Specifies that the preceding operation in a workflow</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ttlSecondsAfterFinished</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>TTLSecondsAfterFinished is the time second to clean up data operations after finished or failed</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>resources</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
+Kubernetes core/v1.ResourceRequirements
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Resources that will be requested by the DataLoad job. <br></p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -519,8 +601,439 @@ map[string]string
 <td>
 <code>status</code></br>
 <em>
-<a href="#data.fluid.io/v1alpha1.DataLoadStatus">
-DataLoadStatus
+<a href="#data.fluid.io/v1alpha1.OperationStatus">
+OperationStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.DataMigrate">DataMigrate
+</h3>
+<p>
+<p>DataMigrate is the Schema for the datamigrates API</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code></br>
+string</td>
+<td>
+<code>data.fluid.io/v1alpha1</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code></br>
+string
+</td>
+<td><code>DataMigrate</code></td>
+</tr>
+<tr>
+<td>
+<code>metadata</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.DataMigrateSpec">
+DataMigrateSpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>VersionSpec</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.VersionSpec">
+VersionSpec
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>VersionSpec</code> are embedded into this type.)
+</p>
+<em>(Optional)</em>
+<p>The version information that instructs fluid to orchestrate a particular version for data migrate.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>from</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.DataToMigrate">
+DataToMigrate
+</a>
+</em>
+</td>
+<td>
+<p>data to migrate source, including dataset and external storage</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>to</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.DataToMigrate">
+DataToMigrate
+</a>
+</em>
+</td>
+<td>
+<p>data to migrate destination, including dataset and external storage</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>block</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>if dataMigrate blocked dataset usage, default is false</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>runtimeType</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>using which runtime to migrate data; if none, take dataset runtime as default</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>options</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>options for migrate, different for each runtime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>policy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.Policy">
+Policy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>policy for migrate, including Once, Cron, OnEvent</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>schedule</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The schedule in Cron format, only set when policy is cron, see <a href="https://en.wikipedia.org/wiki/Cron">https://en.wikipedia.org/wiki/Cron</a>.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<p>PodMetadata defines labels and annotations that will be propagated to DataMigrate pods</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>affinity</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#affinity-v1-core">
+Kubernetes core/v1.Affinity
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Affinity defines affinity for DataMigrate pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>tolerations</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#toleration-v1-core">
+[]Kubernetes core/v1.Toleration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Tolerations defines tolerations for DataMigrate pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>nodeSelector</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NodeSelector defiens node selector for DataMigrate pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>schedulerName</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SchedulerName sets the scheduler to be used for DataMigrate pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>runAfter</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.OperationRef">
+OperationRef
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Specifies that the preceding operation in a workflow</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ttlSecondsAfterFinished</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>TTLSecondsAfterFinished is the time second to clean up data operations after finished or failed</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>resources</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
+Kubernetes core/v1.ResourceRequirements
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Resources that will be requested by the DataMigrate job. <br></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>parallelism</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Parallelism defines the parallelism tasks numbers for DataMigrate. If the value is greater than 1, the job acts
+as a launcher, and users should define the WorkerSpec.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>parallelOptions</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ParallelOptions defines options like ssh port and ssh secret name when parallelism is greater than 1.</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.OperationStatus">
+OperationStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.DataProcess">DataProcess
+</h3>
+<p>
+<p>DataProcess is the Schema for the dataprocesses API</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code></br>
+string</td>
+<td>
+<code>data.fluid.io/v1alpha1</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code></br>
+string
+</td>
+<td><code>DataProcess</code></td>
+</tr>
+<tr>
+<td>
+<code>metadata</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.DataProcessSpec">
+DataProcessSpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>dataset</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.TargetDatasetWithMountPath">
+TargetDatasetWithMountPath
+</a>
+</em>
+</td>
+<td>
+<p>Dataset specifies the target dataset and its mount path.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>processor</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.Processor">
+Processor
+</a>
+</em>
+</td>
+<td>
+<p>Processor specify how to process data.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>runAfter</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.OperationRef">
+OperationRef
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Specifies that the preceding operation in a workflow</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ttlSecondsAfterFinished</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>TTLSecondsAfterFinished is the time second to clean up data operations after finished or failed</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.OperationStatus">
+OperationStatus
 </a>
 </em>
 </td>
@@ -547,9 +1060,7 @@ DataLoadStatus
 <code>apiVersion</code></br>
 string</td>
 <td>
-<code>
-data.fluid.io/v1alpha1
-</code>
+<code>data.fluid.io/v1alpha1</code>
 </td>
 </tr>
 <tr>
@@ -563,7 +1074,7 @@ string
 <td>
 <code>metadata</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#objectmeta-v1-meta">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#objectmeta-v1-meta">
 Kubernetes meta/v1.ObjectMeta
 </a>
 </em>
@@ -596,7 +1107,10 @@ DatasetSpec
 </em>
 </td>
 <td>
-<p>Mount Points to be mounted on Alluxio.</p>
+<em>(Optional)</em>
+<p>Mount Points to be mounted on cache runtime. <br>
+This field can be empty because some runtimes don&rsquo;t need to mount external storage (e.g.
+<a href="https://v6d.io/">Vineyard</a>).</p>
 </td>
 </tr>
 <tr>
@@ -632,7 +1146,7 @@ This field influences the scheduling of pods that use the cached dataset.</p>
 <td>
 <code>tolerations</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#toleration-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#toleration-v1-core">
 []Kubernetes core/v1.Toleration
 </a>
 </em>
@@ -646,7 +1160,7 @@ This field influences the scheduling of pods that use the cached dataset.</p>
 <td>
 <code>accessModes</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#persistentvolumeaccessmode-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#persistentvolumeaccessmode-v1-core">
 []Kubernetes core/v1.PersistentVolumeAccessMode
 </a>
 </em>
@@ -698,6 +1212,32 @@ DataRestoreLocation
 <p>DataRestoreLocation is the location to load data of dataset  been backuped</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>sharedOptions</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SharedOptions is the options to all mount</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>sharedEncryptOptions</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.EncryptOption">
+[]EncryptOption
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SharedEncryptOptions is the encryptOption to all mount</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -707,6 +1247,195 @@ DataRestoreLocation
 <em>
 <a href="#data.fluid.io/v1alpha1.DatasetStatus">
 DatasetStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.EFCRuntime">EFCRuntime
+</h3>
+<p>
+<p>EFCRuntime is the Schema for the efcruntimes API</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code></br>
+string</td>
+<td>
+<code>data.fluid.io/v1alpha1</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code></br>
+string
+</td>
+<td><code>EFCRuntime</code></td>
+</tr>
+<tr>
+<td>
+<code>metadata</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.EFCRuntimeSpec">
+EFCRuntimeSpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>master</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.EFCCompTemplateSpec">
+EFCCompTemplateSpec
+</a>
+</em>
+</td>
+<td>
+<p>The component spec of EFC master</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>worker</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.EFCCompTemplateSpec">
+EFCCompTemplateSpec
+</a>
+</em>
+</td>
+<td>
+<p>The component spec of EFC worker</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>initFuse</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.InitFuseSpec">
+InitFuseSpec
+</a>
+</em>
+</td>
+<td>
+<p>The spec of init alifuse</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>fuse</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.EFCFuseSpec">
+EFCFuseSpec
+</a>
+</em>
+</td>
+<td>
+<p>The component spec of EFC Fuse</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>tieredstore</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.TieredStore">
+TieredStore
+</a>
+</em>
+</td>
+<td>
+<p>Tiered storage used by EFC worker</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>replicas</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<p>The replicas of the worker, need to be specified</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>osAdvise</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.OSAdvise">
+OSAdvise
+</a>
+</em>
+</td>
+<td>
+<p>Operating system optimization for EFC</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>cleanCachePolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.CleanCachePolicy">
+CleanCachePolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CleanCachePolicy defines cleanCache Policy</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to all EFC&rsquo;s pods</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.RuntimeStatus">
+RuntimeStatus
 </a>
 </em>
 </td>
@@ -733,9 +1462,7 @@ DatasetStatus
 <code>apiVersion</code></br>
 string</td>
 <td>
-<code>
-data.fluid.io/v1alpha1
-</code>
+<code>data.fluid.io/v1alpha1</code>
 </td>
 </tr>
 <tr>
@@ -749,7 +1476,7 @@ string
 <td>
 <code>metadata</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#objectmeta-v1-meta">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#objectmeta-v1-meta">
 Kubernetes meta/v1.ObjectMeta
 </a>
 </em>
@@ -979,6 +1706,20 @@ For now, only &ldquo;hdfs-site.xml&rdquo; and &ldquo;core-site.xml&rdquo; are su
 of the file as the value.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>cleanCachePolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.CleanCachePolicy">
+CleanCachePolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CleanCachePolicy defines cleanCache Policy</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -1014,9 +1755,7 @@ RuntimeStatus
 <code>apiVersion</code></br>
 string</td>
 <td>
-<code>
-data.fluid.io/v1alpha1
-</code>
+<code>data.fluid.io/v1alpha1</code>
 </td>
 </tr>
 <tr>
@@ -1030,7 +1769,7 @@ string
 <td>
 <code>metadata</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#objectmeta-v1-meta">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#objectmeta-v1-meta">
 Kubernetes meta/v1.ObjectMeta
 </a>
 </em>
@@ -1197,7 +1936,23 @@ map[string]string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Labels will be added on all the JindoFS pods.</p>
+<p>Labels will be added on all the JindoFS pods.
+DEPRECATED: this is a deprecated field. Please use PodMetadata.Labels instead.
+Note: this field is set to be exclusive with PodMetadata.Labels</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to all Jindo&rsquo;s fuse pods</p>
 </td>
 </tr>
 <tr>
@@ -1223,6 +1978,48 @@ NetworkMode
 <td>
 <em>(Optional)</em>
 <p>Whether to use hostnetwork or not</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>cleanCachePolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.CleanCachePolicy">
+CleanCachePolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CleanCachePolicy defines cleanCache Policy</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumes</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volume-v1-core">
+[]Kubernetes core/v1.Volume
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Volumes is the list of Kubernetes volumes that can be mounted by the jindo runtime components and/or fuses.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullSecrets</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#localobjectreference-v1-core">
+[]Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ImagePullSecrets that will be used to pull images</p>
 </td>
 </tr>
 </table>
@@ -1260,9 +2057,7 @@ RuntimeStatus
 <code>apiVersion</code></br>
 string</td>
 <td>
-<code>
-data.fluid.io/v1alpha1
-</code>
+<code>data.fluid.io/v1alpha1</code>
 </td>
 </tr>
 <tr>
@@ -1276,7 +2071,7 @@ string
 <td>
 <code>metadata</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#objectmeta-v1-meta">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#objectmeta-v1-meta">
 Kubernetes meta/v1.ObjectMeta
 </a>
 </em>
@@ -1392,6 +2187,17 @@ TieredStore
 </tr>
 <tr>
 <td>
+<code>configs</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Configs of JuiceFS</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>replicas</code></br>
 <em>
 int32
@@ -1425,6 +2231,459 @@ bool
 <em>(Optional)</em>
 <p>Disable monitoring for JuiceFS Runtime
 Prometheus is enabled by default</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumes</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volume-v1-core">
+[]Kubernetes core/v1.Volume
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Volumes is the list of Kubernetes volumes that can be mounted by the alluxio runtime components and/or fuses.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to JuiceFs&rsquo;s pods.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>cleanCachePolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.CleanCachePolicy">
+CleanCachePolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CleanCachePolicy defines cleanCache Policy</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.RuntimeStatus">
+RuntimeStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.ThinRuntime">ThinRuntime
+</h3>
+<p>
+<p>ThinRuntime is the Schema for the thinruntimes API</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code></br>
+string</td>
+<td>
+<code>data.fluid.io/v1alpha1</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code></br>
+string
+</td>
+<td><code>ThinRuntime</code></td>
+</tr>
+<tr>
+<td>
+<code>metadata</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ThinRuntimeSpec">
+ThinRuntimeSpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>profileName</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>The specific runtime profile name, empty value is used for handling datasets which mount another dataset</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>worker</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ThinCompTemplateSpec">
+ThinCompTemplateSpec
+</a>
+</em>
+</td>
+<td>
+<p>The component spec of worker</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>fuse</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ThinFuseSpec">
+ThinFuseSpec
+</a>
+</em>
+</td>
+<td>
+<p>The component spec of thinRuntime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>tieredstore</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.TieredStore">
+TieredStore
+</a>
+</em>
+</td>
+<td>
+<p>Tiered storage</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>replicas</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<p>The replicas of the worker, need to be specified</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>runAs</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.User">
+User
+</a>
+</em>
+</td>
+<td>
+<p>Manage the user to run Runtime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>disablePrometheus</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Disable monitoring for Runtime
+Prometheus is enabled by default</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumes</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volume-v1-core">
+[]Kubernetes core/v1.Volume
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Volumes is the list of Kubernetes volumes that can be mounted by runtime components and/or fuses.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>management</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.RuntimeManagement">
+RuntimeManagement
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>RuntimeManagement defines policies when managing the runtime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullSecrets</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#localobjectreference-v1-core">
+[]Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ImagePullSecrets that will be used to pull images</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.RuntimeStatus">
+RuntimeStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.VineyardRuntime">VineyardRuntime
+</h3>
+<p>
+<p>VineyardRuntime is the Schema for the VineyardRuntimes API</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code></br>
+string</td>
+<td>
+<code>data.fluid.io/v1alpha1</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code></br>
+string
+</td>
+<td><code>VineyardRuntime</code></td>
+</tr>
+<tr>
+<td>
+<code>metadata</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.VineyardRuntimeSpec">
+VineyardRuntimeSpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>master</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.MasterSpec">
+MasterSpec
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Master holds the configurations for Vineyard Master component
+Represents the Etcd component in Vineyard</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>worker</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.VineyardCompTemplateSpec">
+VineyardCompTemplateSpec
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Worker holds the configurations for Vineyard Worker component
+Represents the Vineyardd component in Vineyard</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>replicas</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<p>The replicas of the worker, need to be specified
+If worker.replicas and the field are both specified, the field will be respected</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>fuse</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.VineyardClientSocketSpec">
+VineyardClientSocketSpec
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Fuse holds the configurations for Vineyard client socket.
+Note that the &ldquo;Fuse&rdquo; here is kept just for API consistency, VineyardRuntime mount a socket file instead of a FUSE filesystem to make data cache available.
+Applications can connect to the vineyard runtime components through IPC or RPC.
+IPC is the default way to connect to vineyard runtime components, which is more efficient than RPC.
+If the socket file is not mounted, the connection will fall back to RPC.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>tieredstore</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.TieredStore">
+TieredStore
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Tiered storage used by vineyardd
+The MediumType can only be <code>MEM</code> and <code>SSD</code>
+<code>MEM</code> actually represents the shared memory of vineyardd.
+<code>SSD</code> represents the external storage of vineyardd.
+Default is as follows.
+tieredstore:
+levels:
+- level: 0
+mediumtype: MEM
+quota: 4Gi</p>
+<p>Choose hostpath as the external storage of vineyardd.
+tieredstore:
+levels:
+- level: 0
+mediumtype: MEM
+quota: 4Gi
+high: &ldquo;0.8&rdquo;
+low: &ldquo;0.3&rdquo;
+- level: 1
+mediumtype: SSD
+quota: 10Gi
+volumeType: Hostpath
+path: /var/spill-path</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>disablePrometheus</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Disable monitoring metrics for Vineyard Runtime
+Default is false</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to Vineyard&rsquo;s pods.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumes</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volume-v1-core">
+[]Kubernetes core/v1.Volume
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Volumes is the list of Kubernetes volumes that can be mounted by the vineyard components (Master and Worker).
+Default is null.</p>
 </td>
 </tr>
 </table>
@@ -1470,6 +2729,85 @@ string
 </td>
 <td>
 <p>Endpoint for accessing</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.AffinityPolicy">AffinityPolicy
+(<code>string</code> alias)</p></h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.AffinityStrategy">AffinityStrategy</a>)
+</p>
+<p>
+<p>AffinityPolicy the strategy for the affinity between Data Operation Pods.</p>
+</p>
+<h3 id="data.fluid.io/v1alpha1.AffinityStrategy">AffinityStrategy
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.OperationRef">OperationRef</a>)
+</p>
+<p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>dependOn</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ObjectRef">
+ObjectRef
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Specifies the dependent preceding operation in a workflow. If not set, use the operation referred to by RunAfter.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>policy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.AffinityPolicy">
+AffinityPolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Policy one of: &ldquo;&rdquo;, &ldquo;Require&rdquo;, &ldquo;Prefer&rdquo;</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>prefers</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.Prefer">
+[]Prefer
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+<tr>
+<td>
+<code>requires</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.Require">
+[]Require
+</a>
+</em>
+</td>
+<td>
 </td>
 </tr>
 </tbody>
@@ -1545,7 +2883,7 @@ map[string]int
 <td>
 <code>resources</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#resourcerequirements-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
 Kubernetes core/v1.ResourceRequirements
 </a>
 </em>
@@ -1591,6 +2929,61 @@ map[string]string
 <td>
 <em>(Optional)</em>
 <p>NodeSelector is a selector which must be true for the master to fit on a node</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>networkMode</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.NetworkMode">
+NetworkMode
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Whether to use hostnetwork or not</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumeMounts</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volumemount-v1-core">
+[]Kubernetes core/v1.VolumeMount
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>VolumeMounts specifies the volumes listed in &ldquo;.spec.volumes&rdquo; to mount into the alluxio runtime component&rsquo;s filesystem.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to Alluxio&rsquo;s pods</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullSecrets</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#localobjectreference-v1-core">
+[]Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<p>ImagePullSecrets that will be used to pull images</p>
 </td>
 </tr>
 </tbody>
@@ -1647,6 +3040,19 @@ string
 </tr>
 <tr>
 <td>
+<code>imagePullSecrets</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#localobjectreference-v1-core">
+[]Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<p>ImagePullSecrets that will be used to pull images</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>jvmOptions</code></br>
 <em>
 []string
@@ -1683,7 +3089,7 @@ map[string]string
 <td>
 <code>resources</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#resourcerequirements-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
 Kubernetes core/v1.ResourceRequirements
 </a>
 </em>
@@ -1705,19 +3111,6 @@ already allocated to the pod.</p>
 </td>
 <td>
 <p>Arguments that will be passed to Alluxio Fuse</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>global</code></br>
-<em>
-bool
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>If the fuse client should be deployed in global mode,
-otherwise the affinity should be considered</p>
 </td>
 </tr>
 <tr>
@@ -1746,9 +3139,51 @@ FuseCleanPolicy
 <em>(Optional)</em>
 <p>CleanPolicy decides when to clean Alluxio Fuse pods.
 Currently Fluid supports two policies: OnDemand and OnRuntimeDeleted
-OnDemand cleans fuse pod once th fuse pod on some node is not needed
+OnDemand cleans fuse pod once the fuse pod on some node is not needed
 OnRuntimeDeleted cleans fuse pod only when the cache runtime is deleted
 Defaults to OnRuntimeDeleted</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>networkMode</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.NetworkMode">
+NetworkMode
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Whether to use hostnetwork or not</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumeMounts</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volumemount-v1-core">
+[]Kubernetes core/v1.VolumeMount
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>VolumeMounts specifies the volumes listed in &ldquo;.spec.volumes&rdquo; to mount into the alluxio runtime component&rsquo;s filesystem.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to Alluxio&rsquo;s fuse pods</p>
 </td>
 </tr>
 </tbody>
@@ -1979,45 +3414,60 @@ For now, only &ldquo;hdfs-site.xml&rdquo; and &ldquo;core-site.xml&rdquo; are su
 of the file as the value.</p>
 </td>
 </tr>
-</tbody>
-</table>
-<h3 id="data.fluid.io/v1alpha1.BackupLocation">BackupLocation
-</h3>
-<p>
-(<em>Appears on:</em>
-<a href="#data.fluid.io/v1alpha1.DataBackupStatus">DataBackupStatus</a>)
-</p>
-<p>
-<p>BackupLocation describes the final backup location of DataBackup</p>
-</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
 <tr>
 <td>
-<code>path</code></br>
+<code>volumes</code></br>
 <em>
-string
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volume-v1-core">
+[]Kubernetes core/v1.Volume
+</a>
 </em>
 </td>
 <td>
-<p>Path describes the path of backup, in the form of local:///absolutePath or pvc://<pvcName>/subpath</p>
+<em>(Optional)</em>
+<p>Volumes is the list of Kubernetes volumes that can be mounted by the alluxio runtime components and/or fuses.</p>
 </td>
 </tr>
 <tr>
 <td>
-<code>nodeName</code></br>
+<code>podMetadata</code></br>
 <em>
-string
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
 </em>
 </td>
 <td>
-<p>NodeName describes the nodeName of backup if Path is in the form of local://subpath</p>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to Alluxio&rsquo;s pods</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>management</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.RuntimeManagement">
+RuntimeManagement
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>RuntimeManagement defines policies when managing the runtime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullSecrets</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#localobjectreference-v1-core">
+[]Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ImagePullSecrets that will be used to pull images</p>
 </td>
 </tr>
 </tbody>
@@ -2043,7 +3493,7 @@ string
 <td>
 <code>required</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#nodeselector-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#nodeselector-v1-core">
 Kubernetes core/v1.NodeSelector
 </a>
 </em>
@@ -2054,12 +3504,108 @@ Kubernetes core/v1.NodeSelector
 </tr>
 </tbody>
 </table>
+<h3 id="data.fluid.io/v1alpha1.CleanCachePolicy">CleanCachePolicy
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.EFCRuntimeSpec">EFCRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.GooseFSRuntimeSpec">GooseFSRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.JindoRuntimeSpec">JindoRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.JuiceFSRuntimeSpec">JuiceFSRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.RuntimeManagement">RuntimeManagement</a>)
+</p>
+<p>
+<p>CleanCachePolicy defines policies when cleaning cache</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>gracePeriodSeconds</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Optional duration in seconds the cache needs to clean gracefully. May be decreased in delete runtime request.
+Value must be non-negative integer. The value zero indicates clean immediately via the timeout
+command (no opportunity to shut down).
+If this value is nil, the default grace period will be used instead.
+The grace period is the duration in seconds after the processes running in the pod are sent
+a termination signal and the time when the processes are forcibly halted with timeout command.
+Set this value longer than the expected cleanup time for your process.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>maxRetryAttempts</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Optional max retry Attempts when cleanCache function returns an error after execution, runtime attempts
+to run it three more times by default. With Maximum Retry Attempts, you can customize the maximum number
+of retries. This gives you the option to continue processing retries.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.ClientMetrics">ClientMetrics
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.JindoFuseSpec">JindoFuseSpec</a>)
+</p>
+<p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>enabled</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<p>Enabled decides whether to expose client metrics.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>scrapeTarget</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>ScrapeTarget decides which fuse component will be scraped by Prometheus.
+It is a list separated by comma where supported items are [MountPod, Sidecar, All (indicates MountPod and Sidecar), None].
+Defaults to None when it is not explicitly set.</p>
+</td>
+</tr>
+</tbody>
+</table>
 <h3 id="data.fluid.io/v1alpha1.Condition">Condition
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#data.fluid.io/v1alpha1.DataBackupStatus">DataBackupStatus</a>, 
-<a href="#data.fluid.io/v1alpha1.DataLoadStatus">DataLoadStatus</a>)
+<a href="#data.fluid.io/v1alpha1.OperationStatus">OperationStatus</a>)
 </p>
 <p>
 <p>Condition explains the transitions on phase</p>
@@ -2087,7 +3633,7 @@ common.ConditionType
 <td>
 <code>status</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#conditionstatus-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#conditionstatus-v1-core">
 Kubernetes core/v1.ConditionStatus
 </a>
 </em>
@@ -2122,7 +3668,7 @@ string
 <td>
 <code>lastProbeTime</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#time-v1-meta">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#time-v1-meta">
 Kubernetes meta/v1.Time
 </a>
 </em>
@@ -2135,7 +3681,7 @@ Kubernetes meta/v1.Time
 <td>
 <code>lastTransitionTime</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#time-v1-meta">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#time-v1-meta">
 Kubernetes meta/v1.Time
 </a>
 </em>
@@ -2186,6 +3732,124 @@ bool
 <td>
 <em>(Optional)</em>
 <p>Pin the dataset or not. Refer to <a href="https://docs.alluxio.io/os/user/stable/en/operation/User-CLI.html#pin">Alluxio User-CLI pin</a></p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.DataBackup">DataBackup
+</h3>
+<p>
+<p>DataBackup is the Schema for the backup API</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>metadata</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.DataBackupSpec">
+DataBackupSpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>dataset</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Dataset defines the target dataset of the DataBackup</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>backupPath</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>BackupPath defines the target path to save data of the DataBackup</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>runAs</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.User">
+User
+</a>
+</em>
+</td>
+<td>
+<p>Manage the user to run Alluxio DataBackup</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>runAfter</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.OperationRef">
+OperationRef
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Specifies that the preceding operation in a workflow</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ttlSecondsAfterFinished</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>TTLSecondsAfterFinished is the time second to clean up data operations after finished or failed</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.OperationStatus">
+OperationStatus
+</a>
+</em>
+</td>
+<td>
 </td>
 </tr>
 </tbody>
@@ -2242,71 +3906,30 @@ User
 <p>Manage the user to run Alluxio DataBackup</p>
 </td>
 </tr>
-</tbody>
-</table>
-<h3 id="data.fluid.io/v1alpha1.DataBackupStatus">DataBackupStatus
-</h3>
-<p>
-(<em>Appears on:</em>
-<a href="#data.fluid.io/v1alpha1.DataBackup">DataBackup</a>)
-</p>
-<p>
-<p>DataBackupStatus defines the observed state of DataBackup</p>
-</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
 <tr>
 <td>
-<code>phase</code></br>
+<code>runAfter</code></br>
 <em>
-common.Phase
-</em>
-</td>
-<td>
-<p>Phase describes current phase of DataBackup</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>backupLocation</code></br>
-<em>
-<a href="#data.fluid.io/v1alpha1.BackupLocation">
-BackupLocation
+<a href="#data.fluid.io/v1alpha1.OperationRef">
+OperationRef
 </a>
 </em>
 </td>
 <td>
-<p>BackupLocation tell user the location to save data of the DataBackup</p>
+<em>(Optional)</em>
+<p>Specifies that the preceding operation in a workflow</p>
 </td>
 </tr>
 <tr>
 <td>
-<code>duration</code></br>
+<code>ttlSecondsAfterFinished</code></br>
 <em>
-string
+int32
 </em>
 </td>
 <td>
-<p>Duration tell user how much time was spent to backup</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>conditions</code></br>
-<em>
-<a href="#data.fluid.io/v1alpha1.Condition">
-[]Condition
-</a>
-</em>
-</td>
-<td>
-<p>Conditions consists of transition information on DataBackup&rsquo;s Phase</p>
+<em>(Optional)</em>
+<p>TTLSecondsAfterFinished is the time second to clean up data operations after finished or failed</p>
 </td>
 </tr>
 </tbody>
@@ -2376,16 +3999,147 @@ map[string]string
 <p>Options specifies the extra dataload properties for runtime</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<p>PodMetadata defines labels and annotations that will be propagated to DataLoad pods</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>affinity</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#affinity-v1-core">
+Kubernetes core/v1.Affinity
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Affinity defines affinity for DataLoad pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>tolerations</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#toleration-v1-core">
+[]Kubernetes core/v1.Toleration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Tolerations defines tolerations for DataLoad pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>nodeSelector</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NodeSelector defiens node selector for DataLoad pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>schedulerName</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SchedulerName sets the scheduler to be used for DataLoad pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>policy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.Policy">
+Policy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>including Once, Cron, OnEvent</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>schedule</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The schedule in Cron format, only set when policy is cron, see <a href="https://en.wikipedia.org/wiki/Cron">https://en.wikipedia.org/wiki/Cron</a>.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>runAfter</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.OperationRef">
+OperationRef
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Specifies that the preceding operation in a workflow</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ttlSecondsAfterFinished</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>TTLSecondsAfterFinished is the time second to clean up data operations after finished or failed</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>resources</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
+Kubernetes core/v1.ResourceRequirements
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Resources that will be requested by the DataLoad job. <br></p>
+</td>
+</tr>
 </tbody>
 </table>
-<h3 id="data.fluid.io/v1alpha1.DataLoadStatus">DataLoadStatus
+<h3 id="data.fluid.io/v1alpha1.DataMigrateSpec">DataMigrateSpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#data.fluid.io/v1alpha1.DataLoad">DataLoad</a>)
+<a href="#data.fluid.io/v1alpha1.DataMigrate">DataMigrate</a>)
 </p>
 <p>
-<p>DataLoadStatus defines the observed state of DataLoad</p>
+<p>DataMigrateSpec defines the desired state of DataMigrate</p>
 </p>
 <table>
 <thead>
@@ -2397,37 +4151,308 @@ map[string]string
 <tbody>
 <tr>
 <td>
-<code>phase</code></br>
+<code>VersionSpec</code></br>
 <em>
-common.Phase
-</em>
-</td>
-<td>
-<p>Phase describes current phase of DataLoad</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>conditions</code></br>
-<em>
-<a href="#data.fluid.io/v1alpha1.Condition">
-[]Condition
+<a href="#data.fluid.io/v1alpha1.VersionSpec">
+VersionSpec
 </a>
 </em>
 </td>
 <td>
-<p>Conditions consists of transition information on DataLoad&rsquo;s Phase</p>
+<p>
+(Members of <code>VersionSpec</code> are embedded into this type.)
+</p>
+<em>(Optional)</em>
+<p>The version information that instructs fluid to orchestrate a particular version for data migrate.</p>
 </td>
 </tr>
 <tr>
 <td>
-<code>duration</code></br>
+<code>from</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.DataToMigrate">
+DataToMigrate
+</a>
+</em>
+</td>
+<td>
+<p>data to migrate source, including dataset and external storage</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>to</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.DataToMigrate">
+DataToMigrate
+</a>
+</em>
+</td>
+<td>
+<p>data to migrate destination, including dataset and external storage</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>block</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>if dataMigrate blocked dataset usage, default is false</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>runtimeType</code></br>
 <em>
 string
 </em>
 </td>
 <td>
-<p>Duration tell user how much time was spent to load the data</p>
+<em>(Optional)</em>
+<p>using which runtime to migrate data; if none, take dataset runtime as default</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>options</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>options for migrate, different for each runtime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>policy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.Policy">
+Policy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>policy for migrate, including Once, Cron, OnEvent</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>schedule</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The schedule in Cron format, only set when policy is cron, see <a href="https://en.wikipedia.org/wiki/Cron">https://en.wikipedia.org/wiki/Cron</a>.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<p>PodMetadata defines labels and annotations that will be propagated to DataMigrate pods</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>affinity</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#affinity-v1-core">
+Kubernetes core/v1.Affinity
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Affinity defines affinity for DataMigrate pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>tolerations</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#toleration-v1-core">
+[]Kubernetes core/v1.Toleration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Tolerations defines tolerations for DataMigrate pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>nodeSelector</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NodeSelector defiens node selector for DataMigrate pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>schedulerName</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SchedulerName sets the scheduler to be used for DataMigrate pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>runAfter</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.OperationRef">
+OperationRef
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Specifies that the preceding operation in a workflow</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ttlSecondsAfterFinished</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>TTLSecondsAfterFinished is the time second to clean up data operations after finished or failed</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>resources</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
+Kubernetes core/v1.ResourceRequirements
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Resources that will be requested by the DataMigrate job. <br></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>parallelism</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Parallelism defines the parallelism tasks numbers for DataMigrate. If the value is greater than 1, the job acts
+as a launcher, and users should define the WorkerSpec.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>parallelOptions</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ParallelOptions defines options like ssh port and ssh secret name when parallelism is greater than 1.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.DataProcessSpec">DataProcessSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.DataProcess">DataProcess</a>)
+</p>
+<p>
+<p>DataProcessSpec defines the desired state of DataProcess</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>dataset</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.TargetDatasetWithMountPath">
+TargetDatasetWithMountPath
+</a>
+</em>
+</td>
+<td>
+<p>Dataset specifies the target dataset and its mount path.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>processor</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.Processor">
+Processor
+</a>
+</em>
+</td>
+<td>
+<p>Processor specify how to process data.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>runAfter</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.OperationRef">
+OperationRef
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Specifies that the preceding operation in a workflow</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ttlSecondsAfterFinished</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>TTLSecondsAfterFinished is the time second to clean up data operations after finished or failed</p>
 </td>
 </tr>
 </tbody>
@@ -2475,6 +4500,50 @@ string
 </tr>
 </tbody>
 </table>
+<h3 id="data.fluid.io/v1alpha1.DataToMigrate">DataToMigrate
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.DataMigrateSpec">DataMigrateSpec</a>)
+</p>
+<p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>dataset</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.DatasetToMigrate">
+DatasetToMigrate
+</a>
+</em>
+</td>
+<td>
+<p>dataset to migrate</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>externalStorage</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ExternalStorage">
+ExternalStorage
+</a>
+</em>
+</td>
+<td>
+<p>external storage for data migrate</p>
+</td>
+</tr>
+</tbody>
+</table>
 <h3 id="data.fluid.io/v1alpha1.DatasetCondition">DatasetCondition
 </h3>
 <p>
@@ -2509,7 +4578,7 @@ DatasetConditionType
 <td>
 <code>status</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#conditionstatus-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#conditionstatus-v1-core">
 Kubernetes core/v1.ConditionStatus
 </a>
 </em>
@@ -2544,7 +4613,7 @@ string
 <td>
 <code>lastUpdateTime</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#time-v1-meta">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#time-v1-meta">
 Kubernetes meta/v1.Time
 </a>
 </em>
@@ -2557,7 +4626,7 @@ Kubernetes meta/v1.Time
 <td>
 <code>lastTransitionTime</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#time-v1-meta">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#time-v1-meta">
 Kubernetes meta/v1.Time
 </a>
 </em>
@@ -2595,7 +4664,10 @@ Kubernetes meta/v1.Time
 </em>
 </td>
 <td>
-<p>Mount Points to be mounted on Alluxio.</p>
+<em>(Optional)</em>
+<p>Mount Points to be mounted on cache runtime. <br>
+This field can be empty because some runtimes don&rsquo;t need to mount external storage (e.g.
+<a href="https://v6d.io/">Vineyard</a>).</p>
 </td>
 </tr>
 <tr>
@@ -2631,7 +4703,7 @@ This field influences the scheduling of pods that use the cached dataset.</p>
 <td>
 <code>tolerations</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#toleration-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#toleration-v1-core">
 []Kubernetes core/v1.Toleration
 </a>
 </em>
@@ -2645,7 +4717,7 @@ This field influences the scheduling of pods that use the cached dataset.</p>
 <td>
 <code>accessModes</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#persistentvolumeaccessmode-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#persistentvolumeaccessmode-v1-core">
 []Kubernetes core/v1.PersistentVolumeAccessMode
 </a>
 </em>
@@ -2695,6 +4767,32 @@ DataRestoreLocation
 <td>
 <em>(Optional)</em>
 <p>DataRestoreLocation is the location to load data of dataset  been backuped</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>sharedOptions</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SharedOptions is the options to all mount</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>sharedEncryptOptions</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.EncryptOption">
+[]EncryptOption
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SharedEncryptOptions is the encryptOption to all mount</p>
 </td>
 </tr>
 </tbody>
@@ -2823,7 +4921,8 @@ string
 </td>
 <td>
 <p>DataLoadRef specifies the running DataLoad job that targets this Dataset.
-This is mainly used as a lock to prevent concurrent DataLoad jobs.</p>
+This is mainly used as a lock to prevent concurrent DataLoad jobs.
+Deprecated, use OperationRef instead</p>
 </td>
 </tr>
 <tr>
@@ -2835,7 +4934,478 @@ string
 </td>
 <td>
 <p>DataBackupRef specifies the running Backup job that targets this Dataset.
-This is mainly used as a lock to prevent concurrent DataBackup jobs.</p>
+This is mainly used as a lock to prevent concurrent DataBackup jobs.
+Deprecated, use OperationRef instead</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>operationRef</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<p>OperationRef specifies the Operation that targets this Dataset.
+This is mainly used as a lock to prevent concurrent same Operation jobs.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>datasetRef</code></br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<p>DatasetRef specifies the datasets namespaced name mounting this Dataset.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.DatasetToMigrate">DatasetToMigrate
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.DataToMigrate">DataToMigrate</a>)
+</p>
+<p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>name</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>name of dataset</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>namespace</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>namespace of dataset</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>path</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>path to migrate</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.EFCCompTemplateSpec">EFCCompTemplateSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.EFCRuntimeSpec">EFCRuntimeSpec</a>)
+</p>
+<p>
+<p>EFCCompTemplateSpec is a description of the EFC components</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>replicas</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Replicas is the desired number of replicas of the given template.
+If unspecified, defaults to 1.
+replicas is the min replicas of dataset in the cluster</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>version</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.VersionSpec">
+VersionSpec
+</a>
+</em>
+</td>
+<td>
+<p>The version information that instructs fluid to orchestrate a particular version of EFC Comp</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>properties</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Configurable properties for the EFC component.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ports</code></br>
+<em>
+map[string]int
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ports used by EFC(e.g. rpc: 19998 for master).</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>resources</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
+Kubernetes core/v1.ResourceRequirements
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Resources that will be requested by the EFC component. <br>
+<br>
+Resources are not allowed for ephemeral containers. Ephemeral containers use spare resources
+already allocated to the pod.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>disabled</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Enabled or Disabled for the components.
+Default enable.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>nodeSelector</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NodeSelector is a selector which must be true for the component to fit on a node.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>networkMode</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.NetworkMode">
+NetworkMode
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Whether to use host network or not.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to EFC&rsquo;s master and worker pods</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.EFCFuseSpec">EFCFuseSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.EFCRuntimeSpec">EFCRuntimeSpec</a>)
+</p>
+<p>
+<p>EFCFuseSpec is a description of the EFC Fuse</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>version</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.VersionSpec">
+VersionSpec
+</a>
+</em>
+</td>
+<td>
+<p>The version information that instructs fluid to orchestrate a particular version of EFC Fuse</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>properties</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Configurable properties for EFC fuse</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>resources</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
+Kubernetes core/v1.ResourceRequirements
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Resources that will be requested by EFC Fuse. <br>
+<br>
+Resources are not allowed for ephemeral containers. Ephemeral containers use spare resources
+already allocated to the pod.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>nodeSelector</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NodeSelector is a selector which must be true for the fuse client to fit on a node,
+this option only effect when global is enabled</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>cleanPolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.FuseCleanPolicy">
+FuseCleanPolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CleanPolicy decides when to clean EFC Fuse pods.
+Currently Fluid supports two policies: OnDemand and OnRuntimeDeleted
+OnDemand cleans fuse pod once th fuse pod on some node is not needed
+OnRuntimeDeleted cleans fuse pod only when the cache runtime is deleted
+Defaults to OnRuntimeDeleted</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>networkMode</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.NetworkMode">
+NetworkMode
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Whether to use hostnetwork or not</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to EFC&rsquo;s fuse pods</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.EFCRuntimeSpec">EFCRuntimeSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.EFCRuntime">EFCRuntime</a>)
+</p>
+<p>
+<p>EFCRuntimeSpec defines the desired state of EFCRuntime</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>master</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.EFCCompTemplateSpec">
+EFCCompTemplateSpec
+</a>
+</em>
+</td>
+<td>
+<p>The component spec of EFC master</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>worker</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.EFCCompTemplateSpec">
+EFCCompTemplateSpec
+</a>
+</em>
+</td>
+<td>
+<p>The component spec of EFC worker</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>initFuse</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.InitFuseSpec">
+InitFuseSpec
+</a>
+</em>
+</td>
+<td>
+<p>The spec of init alifuse</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>fuse</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.EFCFuseSpec">
+EFCFuseSpec
+</a>
+</em>
+</td>
+<td>
+<p>The component spec of EFC Fuse</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>tieredstore</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.TieredStore">
+TieredStore
+</a>
+</em>
+</td>
+<td>
+<p>Tiered storage used by EFC worker</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>replicas</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<p>The replicas of the worker, need to be specified</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>osAdvise</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.OSAdvise">
+OSAdvise
+</a>
+</em>
+</td>
+<td>
+<p>Operating system optimization for EFC</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>cleanCachePolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.CleanCachePolicy">
+CleanCachePolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CleanCachePolicy defines cleanCache Policy</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to all EFC&rsquo;s pods</p>
 </td>
 </tr>
 </tbody>
@@ -2844,6 +5414,9 @@ This is mainly used as a lock to prevent concurrent DataBackup jobs.</p>
 </h3>
 <p>
 (<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.DatasetSpec">DatasetSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.ExternalEndpointSpec">ExternalEndpointSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.ExternalStorage">ExternalStorage</a>, 
 <a href="#data.fluid.io/v1alpha1.Mount">Mount</a>)
 </p>
 <p>
@@ -2915,14 +5488,119 @@ SecretKeySelector
 </tr>
 </tbody>
 </table>
+<h3 id="data.fluid.io/v1alpha1.ExternalEndpointSpec">ExternalEndpointSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.MasterSpec">MasterSpec</a>)
+</p>
+<p>
+<p>ExternalEndpointSpec defines the configurations for external etcd cluster</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>uri</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>URI specifies the endpoint of external Etcd cluster
+E,g. &ldquo;etcd-svc.etcd-namespace.svc.cluster.local:2379&rdquo;
+Default is not set and use http protocol to connect to external etcd cluster</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>encryptOptions</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.EncryptOption">
+[]EncryptOption
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>encrypt info for accessing the external etcd cluster</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>options</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Configurable options for External Etcd cluster.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.ExternalStorage">ExternalStorage
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.DataToMigrate">DataToMigrate</a>)
+</p>
+<p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>uri</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>type of external storage, including s3, oss, gcs, ceph, nfs, pvc, etc. (related to runtime)</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>encryptOptions</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.EncryptOption">
+[]EncryptOption
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>encrypt info for external storage</p>
+</td>
+</tr>
+</tbody>
+</table>
 <h3 id="data.fluid.io/v1alpha1.FuseCleanPolicy">FuseCleanPolicy
 (<code>string</code> alias)</p></h3>
 <p>
 (<em>Appears on:</em>
 <a href="#data.fluid.io/v1alpha1.AlluxioFuseSpec">AlluxioFuseSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.EFCFuseSpec">EFCFuseSpec</a>, 
 <a href="#data.fluid.io/v1alpha1.GooseFSFuseSpec">GooseFSFuseSpec</a>, 
 <a href="#data.fluid.io/v1alpha1.JindoFuseSpec">JindoFuseSpec</a>, 
-<a href="#data.fluid.io/v1alpha1.JuiceFSFuseSpec">JuiceFSFuseSpec</a>)
+<a href="#data.fluid.io/v1alpha1.JuiceFSFuseSpec">JuiceFSFuseSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.ThinFuseSpec">ThinFuseSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.VineyardClientSocketSpec">VineyardClientSocketSpec</a>)
 </p>
 <p>
 </p>
@@ -2997,7 +5675,7 @@ map[string]int
 <td>
 <code>resources</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#resourcerequirements-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
 Kubernetes core/v1.ResourceRequirements
 </a>
 </em>
@@ -3150,7 +5828,7 @@ map[string]string
 <td>
 <code>resources</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#resourcerequirements-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
 Kubernetes core/v1.ResourceRequirements
 </a>
 </em>
@@ -3172,19 +5850,6 @@ already allocated to the pod.</p>
 </td>
 <td>
 <p>Arguments that will be passed to GooseFS Fuse</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>global</code></br>
-<em>
-bool
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>If the fuse client should be deployed in global mode,
-otherwise the affinity should be considered</p>
 </td>
 </tr>
 <tr>
@@ -3459,6 +6124,20 @@ For now, only &ldquo;hdfs-site.xml&rdquo; and &ldquo;core-site.xml&rdquo; are su
 of the file as the value.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>cleanCachePolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.CleanCachePolicy">
+CleanCachePolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CleanCachePolicy defines cleanCache Policy</p>
+</td>
+</tr>
 </tbody>
 </table>
 <h3 id="data.fluid.io/v1alpha1.HCFSStatus">HCFSStatus
@@ -3498,6 +6177,38 @@ string
 </td>
 <td>
 <p>Underlayer HCFS Compatible Version</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.InitFuseSpec">InitFuseSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.EFCRuntimeSpec">EFCRuntimeSpec</a>)
+</p>
+<p>
+<p>InitFuseSpec is a description of initialize the fuse kernel module for runtime</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>version</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.VersionSpec">
+VersionSpec
+</a>
+</em>
+</td>
+<td>
+<p>The version information that instructs fluid to orchestrate a particular version of Alifuse</p>
 </td>
 </tr>
 </tbody>
@@ -3569,7 +6280,7 @@ map[string]string
 <td>
 <code>resources</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#resourcerequirements-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
 Kubernetes core/v1.ResourceRequirements
 </a>
 </em>
@@ -3642,7 +6353,7 @@ map[string]int
 <td>
 <code>resources</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#resourcerequirements-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
 Kubernetes core/v1.ResourceRequirements
 </a>
 </em>
@@ -3682,7 +6393,7 @@ map[string]string
 <td>
 <code>tolerations</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#toleration-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#toleration-v1-core">
 []Kubernetes core/v1.Toleration
 </a>
 </em>
@@ -3701,8 +6412,62 @@ map[string]string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Labels will be added on all the JindoFS Master or Worker pods.
-Any label already existed will be overriden</p>
+<p>Labels will be added on JindoFS Master or Worker pods.
+DEPRECATED: This is a deprecated field. Please use PodMetadata instead.
+Note: this field is set to be exclusive with PodMetadata.Labels</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to Jindo&rsquo;s pods</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>disabled</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>If disable JindoFS master or worker</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumeMounts</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volumemount-v1-core">
+[]Kubernetes core/v1.VolumeMount
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>VolumeMounts specifies the volumes listed in &ldquo;.spec.volumes&rdquo; to mount into the jindo runtime component&rsquo;s filesystem.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullSecrets</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#localobjectreference-v1-core">
+[]Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<p>ImagePullSecrets that will be used to pull images</p>
 </td>
 </tr>
 </tbody>
@@ -3759,6 +6524,19 @@ string
 </tr>
 <tr>
 <td>
+<code>imagePullSecrets</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#localobjectreference-v1-core">
+[]Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<p>ImagePullSecrets that will be used to pull images</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>properties</code></br>
 <em>
 map[string]string
@@ -3783,7 +6561,7 @@ map[string]string
 <td>
 <code>resources</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#resourcerequirements-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
 Kubernetes core/v1.ResourceRequirements
 </a>
 </em>
@@ -3809,19 +6587,6 @@ already allocated to the pod.</p>
 </tr>
 <tr>
 <td>
-<code>global</code></br>
-<em>
-bool
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>If the fuse client should be deployed in global mode,
-otherwise the affinity should be considered</p>
-</td>
-</tr>
-<tr>
-<td>
 <code>nodeSelector</code></br>
 <em>
 map[string]string
@@ -3837,7 +6602,7 @@ this option only effect when global is enabled</p>
 <td>
 <code>tolerations</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#toleration-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#toleration-v1-core">
 []Kubernetes core/v1.Toleration
 </a>
 </em>
@@ -3856,8 +6621,23 @@ map[string]string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Labels will be added on all the JindoFS Fuse pods.
-Any label already existed will be overriden</p>
+<p>Labels will be added on all the JindoFS pods.
+DEPRECATED: this is a deprecated field. Please use PodMetadata.Labels instead.
+Note: this field is set to be exclusive with PodMetadata.Labels</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to Jindo&rsquo;s fuse pods</p>
 </td>
 </tr>
 <tr>
@@ -3876,6 +6656,43 @@ Currently Fluid supports two policies: OnDemand and OnRuntimeDeleted
 OnDemand cleans fuse pod once th fuse pod on some node is not needed
 OnRuntimeDeleted cleans fuse pod only when the cache runtime is deleted
 Defaults to OnRuntimeDeleted</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>disabled</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>If disable JindoFS fuse</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>logConfig</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+</td>
+</tr>
+<tr>
+<td>
+<code>metrics</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ClientMetrics">
+ClientMetrics
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Define whether fuse metrics will be enabled.</p>
 </td>
 </tr>
 </tbody>
@@ -4041,7 +6858,23 @@ map[string]string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Labels will be added on all the JindoFS pods.</p>
+<p>Labels will be added on all the JindoFS pods.
+DEPRECATED: this is a deprecated field. Please use PodMetadata.Labels instead.
+Note: this field is set to be exclusive with PodMetadata.Labels</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to all Jindo&rsquo;s fuse pods</p>
 </td>
 </tr>
 <tr>
@@ -4067,6 +6900,80 @@ NetworkMode
 <td>
 <em>(Optional)</em>
 <p>Whether to use hostnetwork or not</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>cleanCachePolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.CleanCachePolicy">
+CleanCachePolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CleanCachePolicy defines cleanCache Policy</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumes</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volume-v1-core">
+[]Kubernetes core/v1.Volume
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Volumes is the list of Kubernetes volumes that can be mounted by the jindo runtime components and/or fuses.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullSecrets</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#localobjectreference-v1-core">
+[]Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ImagePullSecrets that will be used to pull images</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.JobProcessor">JobProcessor
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.Processor">Processor</a>)
+</p>
+<p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>podSpec</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#podspec-v1-core">
+Kubernetes core/v1.PodSpec
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodSpec defines Pod specification of the DataProcess job.</p>
 </td>
 </tr>
 </tbody>
@@ -4106,7 +7013,7 @@ replicas is the min replicas of dataset in the cluster</p>
 <td>
 <code>ports</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#containerport-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#containerport-v1-core">
 []Kubernetes core/v1.ContainerPort
 </a>
 </em>
@@ -4120,7 +7027,7 @@ replicas is the min replicas of dataset in the cluster</p>
 <td>
 <code>resources</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#resourcerequirements-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
 Kubernetes core/v1.ResourceRequirements
 </a>
 </em>
@@ -4132,9 +7039,20 @@ Kubernetes core/v1.ResourceRequirements
 </tr>
 <tr>
 <td>
+<code>options</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<p>Options</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>env</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#envvar-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#envvar-v1-core">
 []Kubernetes core/v1.EnvVar
 </a>
 </em>
@@ -4165,6 +7083,48 @@ map[string]string
 <td>
 <em>(Optional)</em>
 <p>NodeSelector is a selector</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumeMounts</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volumemount-v1-core">
+[]Kubernetes core/v1.VolumeMount
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>VolumeMounts specifies the volumes listed in &ldquo;.spec.volumes&rdquo; to mount into runtime component&rsquo;s filesystem.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to JuiceFs&rsquo;s pods.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>networkMode</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.NetworkMode">
+NetworkMode
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Whether to use hostnetwork or not</p>
 </td>
 </tr>
 </tbody>
@@ -4198,7 +7158,7 @@ string
 </tr>
 <tr>
 <td>
-<code>image_tag</code></br>
+<code>imageTag</code></br>
 <em>
 string
 </em>
@@ -4209,7 +7169,7 @@ string
 </tr>
 <tr>
 <td>
-<code>image_pull_policy</code></br>
+<code>imagePullPolicy</code></br>
 <em>
 string
 </em>
@@ -4222,7 +7182,7 @@ string
 <td>
 <code>env</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#envvar-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#envvar-v1-core">
 []Kubernetes core/v1.EnvVar
 </a>
 </em>
@@ -4235,7 +7195,7 @@ string
 <td>
 <code>resources</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#resourcerequirements-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
 Kubernetes core/v1.ResourceRequirements
 </a>
 </em>
@@ -4246,20 +7206,19 @@ Kubernetes core/v1.ResourceRequirements
 </tr>
 <tr>
 <td>
-<code>global</code></br>
+<code>options</code></br>
 <em>
-bool
+map[string]string
 </em>
 </td>
 <td>
 <em>(Optional)</em>
-<p>If the fuse client should be deployed in global mode,
-otherwise the affinity should be considered</p>
+<p>Options mount options that fuse pod will use</p>
 </td>
 </tr>
 <tr>
 <td>
-<code>node_selector</code></br>
+<code>nodeSelector</code></br>
 <em>
 map[string]string
 </em>
@@ -4268,6 +7227,20 @@ map[string]string
 <em>(Optional)</em>
 <p>NodeSelector is a selector which must be true for the fuse client to fit on a node,
 this option only effect when global is enabled</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumeMounts</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volumemount-v1-core">
+[]Kubernetes core/v1.VolumeMount
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>VolumeMounts specifies the volumes listed in &ldquo;.spec.volumes&rdquo; to mount into runtime component&rsquo;s filesystem.</p>
 </td>
 </tr>
 <tr>
@@ -4286,6 +7259,34 @@ Currently Fluid supports two policies: OnDemand and OnRuntimeDeleted
 OnDemand cleans fuse pod once th fuse pod on some node is not needed
 OnRuntimeDeleted cleans fuse pod only when the cache runtime is deleted
 Defaults to OnDemand</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to JuiceFs&rsquo;s pods.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>networkMode</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.NetworkMode">
+NetworkMode
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Whether to use hostnetwork or not</p>
 </td>
 </tr>
 </tbody>
@@ -4400,6 +7401,17 @@ TieredStore
 </tr>
 <tr>
 <td>
+<code>configs</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Configs of JuiceFS</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>replicas</code></br>
 <em>
 int32
@@ -4435,6 +7447,48 @@ bool
 Prometheus is enabled by default</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>volumes</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volume-v1-core">
+[]Kubernetes core/v1.Volume
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Volumes is the list of Kubernetes volumes that can be mounted by the alluxio runtime components and/or fuses.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to JuiceFs&rsquo;s pods.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>cleanCachePolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.CleanCachePolicy">
+CleanCachePolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CleanCachePolicy defines cleanCache Policy</p>
+</td>
+</tr>
 </tbody>
 </table>
 <h3 id="data.fluid.io/v1alpha1.Level">Level
@@ -4468,12 +7522,40 @@ common.MediumType
 </tr>
 <tr>
 <td>
+<code>volumeType</code></br>
+<em>
+common.VolumeType
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>VolumeType is the volume type of the tier. Should be one of the three types: <code>hostPath</code>, <code>emptyDir</code> and <code>volumeTemplate</code>.
+If not set, defaults to hostPath.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumeSource</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.VolumeSource">
+VolumeSource
+</a>
+</em>
+</td>
+<td>
+<p>VolumeSource is the volume source of the tier. It follows the form of corev1.VolumeSource.
+For now, users should only specify VolumeSource when VolumeType is set to emptyDir.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>path</code></br>
 <em>
 string
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>File paths to be used for the tier. Multiple paths are supported.
 Multiple paths should be separated with comma. For example: &ldquo;/mnt/cache1,/mnt/cache2&rdquo;.</p>
 </td>
@@ -4482,7 +7564,7 @@ Multiple paths should be separated with comma. For example: &ldquo;/mnt/cache1,/
 <td>
 <code>quota</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#quantity-resource-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#quantity-resource-core">
 Kubernetes resource.Quantity
 </a>
 </em>
@@ -4535,12 +7617,150 @@ string
 </tr>
 </tbody>
 </table>
+<h3 id="data.fluid.io/v1alpha1.MasterSpec">MasterSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.VineyardRuntimeSpec">VineyardRuntimeSpec</a>)
+</p>
+<p>
+<p>MasterSpec defines the configurations for Vineyard Master component
+which is also regarded as the Etcd component in Vineyard.
+For more info about Vineyard, refer to <a href="https://v6d.io/">Vineyard</a></p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>VineyardCompTemplateSpec</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.VineyardCompTemplateSpec">
+VineyardCompTemplateSpec
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>VineyardCompTemplateSpec</code> are embedded into this type.)
+</p>
+<em>(Optional)</em>
+<p>The component configurations for Vineyard Master</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>endpoint</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ExternalEndpointSpec">
+ExternalEndpointSpec
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ExternalEndpoint defines the configurations for external etcd cluster
+Default is not set
+If set, the Vineyard Master component will not be deployed,
+which means the Vineyard Worker component will use an external Etcd cluster.
+E,g.
+endpoint:
+uri: &ldquo;etcd-svc.etcd-namespace.svc.cluster.local:2379&rdquo;
+encryptOptions:
+- name: access-key
+valueFrom:
+secretKeyRef:
+name: etcd-secret
+key: accesskey</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.Metadata">Metadata
+</h3>
+<p>
+<p>Metadata defines subgroup properties of metav1.ObjectMeta</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>PodMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>PodMetadata</code> are embedded into this type.)
+</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>selector</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#groupkind-v1-meta">
+Kubernetes meta/v1.GroupKind
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.MetadataSyncPolicy">MetadataSyncPolicy
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.RuntimeManagement">RuntimeManagement</a>)
+</p>
+<p>
+<p>MetadataSyncPolicy defines policies when syncing metadata</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>autoSync</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AutoSync enables automatic metadata sync when setting up a runtime. If not set, it defaults to true.</p>
+</td>
+</tr>
+</tbody>
+</table>
 <h3 id="data.fluid.io/v1alpha1.Mount">Mount
 </h3>
 <p>
 (<em>Appears on:</em>
 <a href="#data.fluid.io/v1alpha1.DatasetSpec">DatasetSpec</a>, 
-<a href="#data.fluid.io/v1alpha1.DatasetStatus">DatasetStatus</a>)
+<a href="#data.fluid.io/v1alpha1.DatasetStatus">DatasetStatus</a>, 
+<a href="#data.fluid.io/v1alpha1.RuntimeStatus">RuntimeStatus</a>)
 </p>
 <p>
 <p>Mount describes a mounting. <br>
@@ -4588,6 +7808,7 @@ string
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>The name of mount</p>
 </td>
 </tr>
@@ -4647,10 +7868,307 @@ bool
 (<code>string</code> alias)</p></h3>
 <p>
 (<em>Appears on:</em>
-<a href="#data.fluid.io/v1alpha1.JindoRuntimeSpec">JindoRuntimeSpec</a>)
+<a href="#data.fluid.io/v1alpha1.AlluxioCompTemplateSpec">AlluxioCompTemplateSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.AlluxioFuseSpec">AlluxioFuseSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.EFCCompTemplateSpec">EFCCompTemplateSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.EFCFuseSpec">EFCFuseSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.JindoRuntimeSpec">JindoRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.JuiceFSCompTemplateSpec">JuiceFSCompTemplateSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.JuiceFSFuseSpec">JuiceFSFuseSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.ThinCompTemplateSpec">ThinCompTemplateSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.ThinFuseSpec">ThinFuseSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.VineyardClientSocketSpec">VineyardClientSocketSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.VineyardCompTemplateSpec">VineyardCompTemplateSpec</a>)
 </p>
 <p>
 </p>
+<h3 id="data.fluid.io/v1alpha1.NodePublishSecretPolicy">NodePublishSecretPolicy
+(<code>string</code> alias)</p></h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.ThinRuntimeProfileSpec">ThinRuntimeProfileSpec</a>)
+</p>
+<p>
+</p>
+<h3 id="data.fluid.io/v1alpha1.OSAdvise">OSAdvise
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.EFCRuntimeSpec">EFCRuntimeSpec</a>)
+</p>
+<p>
+<p>OSAdvise is a description of choices to have optimization on specific operating system</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>osVersion</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Specific operating system version that can have optimization.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>enabled</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Enable operating system optimization
+not enabled by default.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.ObjectRef">ObjectRef
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.AffinityStrategy">AffinityStrategy</a>, 
+<a href="#data.fluid.io/v1alpha1.OperationRef">OperationRef</a>)
+</p>
+<p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>API version of the referent operation</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Kind specifies the type of the referent operation</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>name</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Name specifies the name of the referent operation</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>namespace</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Namespace specifies the namespace of the referent operation.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.OperationRef">OperationRef
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.DataBackupSpec">DataBackupSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.DataLoadSpec">DataLoadSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.DataMigrateSpec">DataMigrateSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.DataProcessSpec">DataProcessSpec</a>)
+</p>
+<p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>ObjectRef</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ObjectRef">
+ObjectRef
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>ObjectRef</code> are embedded into this type.)
+</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>affinityStrategy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.AffinityStrategy">
+AffinityStrategy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AffinityStrategy specifies the pod affinity strategy with the referent operation.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.OperationStatus">OperationStatus
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.DataLoad">DataLoad</a>, 
+<a href="#data.fluid.io/v1alpha1.DataMigrate">DataMigrate</a>, 
+<a href="#data.fluid.io/v1alpha1.DataProcess">DataProcess</a>, 
+<a href="#data.fluid.io/v1alpha1.DataBackup">DataBackup</a>)
+</p>
+<p>
+<p>OperationStatus defines the observed state of operation</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>phase</code></br>
+<em>
+common.Phase
+</em>
+</td>
+<td>
+<p>Phase describes current phase of operation</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>duration</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Duration tell user how much time was spent to operation</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>conditions</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.Condition">
+[]Condition
+</a>
+</em>
+</td>
+<td>
+<p>Conditions consists of transition information on operation&rsquo;s Phase</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>infos</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<p>Infos operation customized name-value</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>lastScheduleTime</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#time-v1-meta">
+Kubernetes meta/v1.Time
+</a>
+</em>
+</td>
+<td>
+<p>LastScheduleTime is the last time the cron operation was scheduled</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>lastSuccessfulTime</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#time-v1-meta">
+Kubernetes meta/v1.Time
+</a>
+</em>
+</td>
+<td>
+<p>LastSuccessfulTime is the last time the cron operation successfully completed</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>waitingFor</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.WaitingStatus">
+WaitingStatus
+</a>
+</em>
+</td>
+<td>
+<p>WaitingStatus stores information about waiting operation.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>nodeAffinity</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#nodeaffinity-v1-core">
+Kubernetes core/v1.NodeAffinity
+</a>
+</em>
+</td>
+<td>
+<p>NodeAffinity records the node affinity for operation pods</p>
+</td>
+</tr>
+</tbody>
+</table>
 <h3 id="data.fluid.io/v1alpha1.PlacementMode">PlacementMode
 (<code>string</code> alias)</p></h3>
 <p>
@@ -4659,6 +8177,214 @@ bool
 </p>
 <p>
 </p>
+<h3 id="data.fluid.io/v1alpha1.PodMetadata">PodMetadata
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.AlluxioCompTemplateSpec">AlluxioCompTemplateSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.AlluxioFuseSpec">AlluxioFuseSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.AlluxioRuntimeSpec">AlluxioRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.DataLoadSpec">DataLoadSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.DataMigrateSpec">DataMigrateSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.EFCCompTemplateSpec">EFCCompTemplateSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.EFCFuseSpec">EFCFuseSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.EFCRuntimeSpec">EFCRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.JindoCompTemplateSpec">JindoCompTemplateSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.JindoFuseSpec">JindoFuseSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.JindoRuntimeSpec">JindoRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.JuiceFSCompTemplateSpec">JuiceFSCompTemplateSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.JuiceFSFuseSpec">JuiceFSFuseSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.JuiceFSRuntimeSpec">JuiceFSRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.Metadata">Metadata</a>, 
+<a href="#data.fluid.io/v1alpha1.Processor">Processor</a>, 
+<a href="#data.fluid.io/v1alpha1.VineyardClientSocketSpec">VineyardClientSocketSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.VineyardCompTemplateSpec">VineyardCompTemplateSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.VineyardRuntimeSpec">VineyardRuntimeSpec</a>)
+</p>
+<p>
+<p>PodMetadata defines subgroup properties of metav1.ObjectMeta</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>labels</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<p>Labels are labels of pod specification</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>annotations</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<p>Annotations are annotations of pod specification</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.Policy">Policy
+(<code>string</code> alias)</p></h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.DataLoadSpec">DataLoadSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.DataMigrateSpec">DataMigrateSpec</a>)
+</p>
+<p>
+</p>
+<h3 id="data.fluid.io/v1alpha1.Prefer">Prefer
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.AffinityStrategy">AffinityStrategy</a>)
+</p>
+<p>
+<p>Prefer defines the label key and weight for generating a PreferredSchedulingTerm.</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>name</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+</td>
+</tr>
+<tr>
+<td>
+<code>weight</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.Processor">Processor
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.DataProcessSpec">DataProcessSpec</a>)
+</p>
+<p>
+<p>Processor defines the actual processor for DataProcess. Processor can be either of a Job or a Shell script.</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>serviceAccountName</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ServiceAccountName defiens the serviceAccountName of the container</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations on the processor pod.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>job</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.JobProcessor">
+JobProcessor
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Job represents a processor which runs DataProcess as a job.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>script</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ScriptProcessor">
+ScriptProcessor
+</a>
+</em>
+</td>
+<td>
+<p>Shell represents a processor which executes shell script</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.Require">Require
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.AffinityStrategy">AffinityStrategy</a>)
+</p>
+<p>
+<p>Require defines the label key for generating a NodeSelectorTerm.</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>name</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
 <h3 id="data.fluid.io/v1alpha1.Runtime">Runtime
 </h3>
 <p>
@@ -4768,7 +8494,7 @@ RuntimeConditionType
 <td>
 <code>status</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#conditionstatus-v1-core">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#conditionstatus-v1-core">
 Kubernetes core/v1.ConditionStatus
 </a>
 </em>
@@ -4803,7 +8529,7 @@ string
 <td>
 <code>lastProbeTime</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#time-v1-meta">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#time-v1-meta">
 Kubernetes meta/v1.Time
 </a>
 </em>
@@ -4816,7 +8542,7 @@ Kubernetes meta/v1.Time
 <td>
 <code>lastTransitionTime</code></br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#time-v1-meta">
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#time-v1-meta">
 Kubernetes meta/v1.Time
 </a>
 </em>
@@ -4827,14 +8553,65 @@ Kubernetes meta/v1.Time
 </tr>
 </tbody>
 </table>
+<h3 id="data.fluid.io/v1alpha1.RuntimeManagement">RuntimeManagement
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.AlluxioRuntimeSpec">AlluxioRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.ThinRuntimeSpec">ThinRuntimeSpec</a>)
+</p>
+<p>
+<p>RuntimeManagement defines suggestions for runtime controllers to manage the runtime</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>cleanCachePolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.CleanCachePolicy">
+CleanCachePolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CleanCachePolicy defines the policy of cleaning cache when shutting down the runtime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>metadataSyncPolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.MetadataSyncPolicy">
+MetadataSyncPolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>MetadataSyncPolicy defines the policy of syncing metadata when setting up the runtime. If not set,</p>
+</td>
+</tr>
+</tbody>
+</table>
 <h3 id="data.fluid.io/v1alpha1.RuntimeStatus">RuntimeStatus
 </h3>
 <p>
 (<em>Appears on:</em>
 <a href="#data.fluid.io/v1alpha1.AlluxioRuntime">AlluxioRuntime</a>, 
+<a href="#data.fluid.io/v1alpha1.EFCRuntime">EFCRuntime</a>, 
 <a href="#data.fluid.io/v1alpha1.GooseFSRuntime">GooseFSRuntime</a>, 
 <a href="#data.fluid.io/v1alpha1.JindoRuntime">JindoRuntime</a>, 
-<a href="#data.fluid.io/v1alpha1.JuiceFSRuntime">JuiceFSRuntime</a>)
+<a href="#data.fluid.io/v1alpha1.JuiceFSRuntime">JuiceFSRuntime</a>, 
+<a href="#data.fluid.io/v1alpha1.ThinRuntime">ThinRuntime</a>, 
+<a href="#data.fluid.io/v1alpha1.VineyardRuntime">VineyardRuntime</a>)
 </p>
 <p>
 <p>RuntimeStatus defines the observed state of Runtime</p>
@@ -5153,6 +8930,173 @@ APIGatewayStatus
 <p>APIGatewayStatus represents rest api gateway status</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>mountTime</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#time-v1-meta">
+Kubernetes meta/v1.Time
+</a>
+</em>
+</td>
+<td>
+<p>MountTime represents time last mount happened
+if Mounttime is earlier than master starting time, remount will be required</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>mounts</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.Mount">
+[]Mount
+</a>
+</em>
+</td>
+<td>
+<p>MountPoints represents the mount points specified in the bounded dataset</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>cacheAffinity</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#nodeaffinity-v1-core">
+Kubernetes core/v1.NodeAffinity
+</a>
+</em>
+</td>
+<td>
+<p>CacheAffinity represents the runtime worker pods node affinity including node selector</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.ScriptProcessor">ScriptProcessor
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.Processor">Processor</a>)
+</p>
+<p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>VersionSpec</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.VersionSpec">
+VersionSpec
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>VersionSpec</code> are embedded into this type.)
+</p>
+<p>VersionSpec specifies the container&rsquo;s image info.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>restartPolicy</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#restartpolicy-v1-core">
+Kubernetes core/v1.RestartPolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>RestartPolicy specifies the processor job&rsquo;s restart policy. Only &ldquo;Never&rdquo;, &ldquo;OnFailure&rdquo; is allowed.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>command</code></br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Entrypoint command for ScriptProcessor.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>source</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Script source for ScriptProcessor</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>env</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#envvar-v1-core">
+[]Kubernetes core/v1.EnvVar
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>List of environment variables to set in the container.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumeMounts</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volumemount-v1-core">
+[]Kubernetes core/v1.VolumeMount
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Pod volumes to mount into the container&rsquo;s filesystem.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumes</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volume-v1-core">
+[]Kubernetes core/v1.Volume
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>List of volumes that can be mounted by containers belonging to the pod.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>resources</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
+Kubernetes core/v1.ResourceRequirements
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Resources that will be requested by the DataProcess job. <br></p>
+</td>
+</tr>
 </tbody>
 </table>
 <h3 id="data.fluid.io/v1alpha1.SecretKeySelector">SecretKeySelector
@@ -5200,7 +9144,8 @@ string
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#data.fluid.io/v1alpha1.DataLoadSpec">DataLoadSpec</a>)
+<a href="#data.fluid.io/v1alpha1.DataLoadSpec">DataLoadSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.TargetDatasetWithMountPath">TargetDatasetWithMountPath</a>)
 </p>
 <p>
 <p>TargetDataset defines the target dataset of the DataLoad</p>
@@ -5233,6 +9178,64 @@ string
 </td>
 <td>
 <p>Namespace defines namespace of the target dataset</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.TargetDatasetWithMountPath">TargetDatasetWithMountPath
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.DataProcessSpec">DataProcessSpec</a>)
+</p>
+<p>
+<p>TargetDataset defines which dataset will be processed by DataProcess.
+Under the hood, the dataset&rsquo;s pvc will be mounted to the given mountPath of the DataProcess&rsquo;s containers.</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>TargetDataset</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.TargetDataset">
+TargetDataset
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>TargetDataset</code> are embedded into this type.)
+</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>mountPath</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>MountPath defines where the Dataset should be mounted in DataProcess&rsquo;s containers.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>subPath</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SubPath defines subpath of the target dataset to mount.</p>
 </td>
 </tr>
 </tbody>
@@ -5278,14 +9281,835 @@ int32
 </tr>
 </tbody>
 </table>
+<h3 id="data.fluid.io/v1alpha1.ThinCompTemplateSpec">ThinCompTemplateSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.ThinRuntimeProfileSpec">ThinRuntimeProfileSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.ThinRuntimeSpec">ThinRuntimeSpec</a>)
+</p>
+<p>
+<p>ThinCompTemplateSpec is a description of the thinRuntime components</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>image</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Image for thinRuntime fuse</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imageTag</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Image for thinRuntime fuse</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullPolicy</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>One of the three policies: <code>Always</code>, <code>IfNotPresent</code>, <code>Never</code></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullSecrets</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#localobjectreference-v1-core">
+[]Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ImagePullSecrets that will be used to pull images</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>replicas</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Replicas is the desired number of replicas of the given template.
+If unspecified, defaults to 1.
+replicas is the min replicas of dataset in the cluster</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ports</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#containerport-v1-core">
+[]Kubernetes core/v1.ContainerPort
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ports used thinRuntime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>resources</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
+Kubernetes core/v1.ResourceRequirements
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Resources that will be requested by thinRuntime component.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>env</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#envvar-v1-core">
+[]Kubernetes core/v1.EnvVar
+</a>
+</em>
+</td>
+<td>
+<p>Environment variables that will be used by thinRuntime component.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>enabled</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Enabled or Disabled for the components.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>nodeSelector</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NodeSelector is a selector</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumeMounts</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volumemount-v1-core">
+[]Kubernetes core/v1.VolumeMount
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>VolumeMounts specifies the volumes listed in &ldquo;.spec.volumes&rdquo; to mount into runtime component&rsquo;s filesystem.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>livenessProbe</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#probe-v1-core">
+Kubernetes core/v1.Probe
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>livenessProbe of thin fuse pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>readinessProbe</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#probe-v1-core">
+Kubernetes core/v1.Probe
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>readinessProbe of thin fuse pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>networkMode</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.NetworkMode">
+NetworkMode
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Whether to use hostnetwork or not</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.ThinFuseSpec">ThinFuseSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.ThinRuntimeProfileSpec">ThinRuntimeProfileSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.ThinRuntimeSpec">ThinRuntimeSpec</a>)
+</p>
+<p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>image</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Image for thinRuntime fuse</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imageTag</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Image for thinRuntime fuse</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullPolicy</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>One of the three policies: <code>Always</code>, <code>IfNotPresent</code>, <code>Never</code></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullSecrets</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#localobjectreference-v1-core">
+[]Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ImagePullSecrets that will be used to pull images</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ports</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#containerport-v1-core">
+[]Kubernetes core/v1.ContainerPort
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ports used thinRuntime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>env</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#envvar-v1-core">
+[]Kubernetes core/v1.EnvVar
+</a>
+</em>
+</td>
+<td>
+<p>Environment variables that will be used by thinRuntime Fuse</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>command</code></br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<p>Command that will be passed to thinRuntime Fuse</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>args</code></br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<p>Arguments that will be passed to thinRuntime Fuse</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>options</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<p>Options configurable options of FUSE client, performance parameters usually.
+will be merged with Dataset.spec.mounts.options into fuse pod.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>resources</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
+Kubernetes core/v1.ResourceRequirements
+</a>
+</em>
+</td>
+<td>
+<p>Resources that will be requested by thinRuntime Fuse.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>nodeSelector</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NodeSelector is a selector which must be true for the fuse client to fit on a node,
+this option only effect when global is enabled</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>cleanPolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.FuseCleanPolicy">
+FuseCleanPolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CleanPolicy decides when to clean thinRuntime Fuse pods.
+Currently Fluid supports two policies: OnDemand and OnRuntimeDeleted
+OnDemand cleans fuse pod once the fuse pod on some node is not needed
+OnRuntimeDeleted cleans fuse pod only when the cache runtime is deleted
+Defaults to OnDemand</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>networkMode</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.NetworkMode">
+NetworkMode
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Whether to use hostnetwork or not</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>livenessProbe</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#probe-v1-core">
+Kubernetes core/v1.Probe
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>livenessProbe of thin fuse pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>readinessProbe</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#probe-v1-core">
+Kubernetes core/v1.Probe
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>readinessProbe of thin fuse pod</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumeMounts</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volumemount-v1-core">
+[]Kubernetes core/v1.VolumeMount
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>VolumeMounts specifies the volumes listed in &ldquo;.spec.volumes&rdquo; to mount into the thinruntime component&rsquo;s filesystem.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.ThinRuntimeProfile">ThinRuntimeProfile
+</h3>
+<p>
+<p>ThinRuntimeProfile is the Schema for the ThinRuntimeProfiles API</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>metadata</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ThinRuntimeProfileSpec">
+ThinRuntimeProfileSpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>fileSystemType</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>file system of thinRuntime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullSecrets</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#localobjectreference-v1-core">
+[]Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ImagePullSecrets that will be used to pull images</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>worker</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ThinCompTemplateSpec">
+ThinCompTemplateSpec
+</a>
+</em>
+</td>
+<td>
+<p>The component spec of worker</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>fuse</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ThinFuseSpec">
+ThinFuseSpec
+</a>
+</em>
+</td>
+<td>
+<p>The component spec of thinRuntime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumes</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volume-v1-core">
+[]Kubernetes core/v1.Volume
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Volumes is the list of Kubernetes volumes that can be mounted by runtime components and/or fuses.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>nodePublishSecretPolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.NodePublishSecretPolicy">
+NodePublishSecretPolicy
+</a>
+</em>
+</td>
+<td>
+<p>NodePublishSecretPolicy describes the policy to decide which to do with node publish secret when mounting an existing persistent volume.</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ThinRuntimeProfileStatus">
+ThinRuntimeProfileStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.ThinRuntimeProfileSpec">ThinRuntimeProfileSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.ThinRuntimeProfile">ThinRuntimeProfile</a>)
+</p>
+<p>
+<p>ThinRuntimeProfileSpec defines the desired state of ThinRuntimeProfile</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>fileSystemType</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>file system of thinRuntime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullSecrets</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#localobjectreference-v1-core">
+[]Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ImagePullSecrets that will be used to pull images</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>worker</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ThinCompTemplateSpec">
+ThinCompTemplateSpec
+</a>
+</em>
+</td>
+<td>
+<p>The component spec of worker</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>fuse</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ThinFuseSpec">
+ThinFuseSpec
+</a>
+</em>
+</td>
+<td>
+<p>The component spec of thinRuntime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumes</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volume-v1-core">
+[]Kubernetes core/v1.Volume
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Volumes is the list of Kubernetes volumes that can be mounted by runtime components and/or fuses.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>nodePublishSecretPolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.NodePublishSecretPolicy">
+NodePublishSecretPolicy
+</a>
+</em>
+</td>
+<td>
+<p>NodePublishSecretPolicy describes the policy to decide which to do with node publish secret when mounting an existing persistent volume.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.ThinRuntimeProfileStatus">ThinRuntimeProfileStatus
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.ThinRuntimeProfile">ThinRuntimeProfile</a>)
+</p>
+<p>
+<p>ThinRuntimeProfileStatus defines the observed state of ThinRuntimeProfile</p>
+</p>
+<h3 id="data.fluid.io/v1alpha1.ThinRuntimeSpec">ThinRuntimeSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.ThinRuntime">ThinRuntime</a>)
+</p>
+<p>
+<p>ThinRuntimeSpec defines the desired state of ThinRuntime</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>profileName</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>The specific runtime profile name, empty value is used for handling datasets which mount another dataset</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>worker</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ThinCompTemplateSpec">
+ThinCompTemplateSpec
+</a>
+</em>
+</td>
+<td>
+<p>The component spec of worker</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>fuse</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.ThinFuseSpec">
+ThinFuseSpec
+</a>
+</em>
+</td>
+<td>
+<p>The component spec of thinRuntime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>tieredstore</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.TieredStore">
+TieredStore
+</a>
+</em>
+</td>
+<td>
+<p>Tiered storage</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>replicas</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<p>The replicas of the worker, need to be specified</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>runAs</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.User">
+User
+</a>
+</em>
+</td>
+<td>
+<p>Manage the user to run Runtime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>disablePrometheus</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Disable monitoring for Runtime
+Prometheus is enabled by default</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumes</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volume-v1-core">
+[]Kubernetes core/v1.Volume
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Volumes is the list of Kubernetes volumes that can be mounted by runtime components and/or fuses.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>management</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.RuntimeManagement">
+RuntimeManagement
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>RuntimeManagement defines policies when managing the runtime</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullSecrets</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#localobjectreference-v1-core">
+[]Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ImagePullSecrets that will be used to pull images</p>
+</td>
+</tr>
+</tbody>
+</table>
 <h3 id="data.fluid.io/v1alpha1.TieredStore">TieredStore
 </h3>
 <p>
 (<em>Appears on:</em>
 <a href="#data.fluid.io/v1alpha1.AlluxioRuntimeSpec">AlluxioRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.EFCRuntimeSpec">EFCRuntimeSpec</a>, 
 <a href="#data.fluid.io/v1alpha1.GooseFSRuntimeSpec">GooseFSRuntimeSpec</a>, 
 <a href="#data.fluid.io/v1alpha1.JindoRuntimeSpec">JindoRuntimeSpec</a>, 
-<a href="#data.fluid.io/v1alpha1.JuiceFSRuntimeSpec">JuiceFSRuntimeSpec</a>)
+<a href="#data.fluid.io/v1alpha1.JuiceFSRuntimeSpec">JuiceFSRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.ThinRuntimeSpec">ThinRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.VineyardRuntimeSpec">VineyardRuntimeSpec</a>)
 </p>
 <p>
 <p>TieredStore is a description of the tiered store</p>
@@ -5322,7 +10146,8 @@ int32
 <a href="#data.fluid.io/v1alpha1.DatasetSpec">DatasetSpec</a>, 
 <a href="#data.fluid.io/v1alpha1.GooseFSRuntimeSpec">GooseFSRuntimeSpec</a>, 
 <a href="#data.fluid.io/v1alpha1.JindoRuntimeSpec">JindoRuntimeSpec</a>, 
-<a href="#data.fluid.io/v1alpha1.JuiceFSRuntimeSpec">JuiceFSRuntimeSpec</a>)
+<a href="#data.fluid.io/v1alpha1.JuiceFSRuntimeSpec">JuiceFSRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.ThinRuntimeSpec">ThinRuntimeSpec</a>)
 </p>
 <p>
 <p>User explains the user and group to run a Container</p>
@@ -5386,9 +10211,14 @@ string
 <p>
 (<em>Appears on:</em>
 <a href="#data.fluid.io/v1alpha1.AlluxioRuntimeSpec">AlluxioRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.DataMigrateSpec">DataMigrateSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.EFCCompTemplateSpec">EFCCompTemplateSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.EFCFuseSpec">EFCFuseSpec</a>, 
 <a href="#data.fluid.io/v1alpha1.GooseFSRuntimeSpec">GooseFSRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.InitFuseSpec">InitFuseSpec</a>, 
 <a href="#data.fluid.io/v1alpha1.JindoRuntimeSpec">JindoRuntimeSpec</a>, 
-<a href="#data.fluid.io/v1alpha1.JuiceFSRuntimeSpec">JuiceFSRuntimeSpec</a>)
+<a href="#data.fluid.io/v1alpha1.JuiceFSRuntimeSpec">JuiceFSRuntimeSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.ScriptProcessor">ScriptProcessor</a>)
 </p>
 <p>
 <p>VersionSpec represents the settings for the  version that fluid is orchestrating.</p>
@@ -5436,8 +10266,608 @@ string
 </tr>
 </tbody>
 </table>
+<h3 id="data.fluid.io/v1alpha1.VineyardClientSocketSpec">VineyardClientSocketSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.VineyardRuntimeSpec">VineyardRuntimeSpec</a>)
+</p>
+<p>
+<p>VineyardClientSocketSpec holds the configurations for vineyard client socket</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>image</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Image for Vineyard Fuse
+Default is <code>registry.aliyuncs.com/vineyard/vineyard-fluid-fuse</code></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imageTag</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Image Tag for Vineyard Fuse
+Default is <code>v0.22.2</code></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullPolicy</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Image pull policy for Vineyard Fuse
+Default is <code>IfNotPresent</code>
+Available values are <code>Always</code>, <code>IfNotPresent</code>, <code>Never</code></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>env</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Environment variables that will be used by Vineyard Fuse.
+Default is not set.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>cleanPolicy</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.FuseCleanPolicy">
+FuseCleanPolicy
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CleanPolicy decides when to clean Vineyard Fuse pods.
+Currently Fluid supports two policies: OnDemand and OnRuntimeDeleted
+OnDemand cleans fuse pod once th fuse pod on some node is not needed
+OnRuntimeDeleted cleans fuse pod only when the cache runtime is deleted
+Defaults to OnRuntimeDeleted</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>resources</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
+Kubernetes core/v1.ResourceRequirements
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Resources contains the resource requirements and limits for the Vineyard Fuse.
+Default is not set.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>networkMode</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.NetworkMode">
+NetworkMode
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Whether to use hostnetwork or not
+Default is HostNetwork</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to Vineyard&rsquo;s pods.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>options</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Options for configuring vineyardd parameters.
+Supported options are as follows.
+reserve_memory: (Bool) Whether to reserving enough physical memory pages for vineyardd.
+Default is true.
+allocator: (String) The allocator used by vineyardd, could be &ldquo;dlmalloc&rdquo; or &ldquo;mimalloc&rdquo;.
+Default is &ldquo;dlmalloc&rdquo;.
+compression: (Bool) Compress before migration or spilling.
+Default is true.
+coredump: (Bool) Enable coredump core dump when been aborted.
+Default is false.
+meta_timeout: (Int) Timeout period before waiting the metadata service to be ready, in seconds
+Default is 60.
+etcd_endpoint: (String) The endpoint of etcd.
+Default is same as the etcd endpoint of vineyard worker.
+etcd_prefix: (String) Metadata path prefix in etcd.
+Default is &ldquo;/vineyard&rdquo;.
+size: (String) shared memory size for vineyardd.
+1024M, 1024000, 1G, or 1Gi.
+Default is &ldquo;0&rdquo;, which means no cache.
+When the size is not set to &ldquo;0&rdquo;, it should be greater than the 2048 bytes(2K).
+spill_path: (String) Path to spill temporary files, if not set, spilling will be disabled.
+Default is &ldquo;&rdquo;.
+spill_lower_rate: (Double) The lower rate of memory usage to trigger spilling.
+Default is 0.3.
+spill_upper_rate: (Double) The upper rate of memory usage to stop spilling.
+Default is 0.8.
+Default is as follows.
+fuse:
+options:
+size: &ldquo;0&rdquo;
+etcd_endpoint: &ldquo;http://{{Name}}-master-0.{{Name}}-master.{{Namespace}}:{{EtcdClientPort}}&rdquo;
+etcd_prefix: &ldquo;/vineyard&rdquo;</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.VineyardCompTemplateSpec">VineyardCompTemplateSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.MasterSpec">MasterSpec</a>, 
+<a href="#data.fluid.io/v1alpha1.VineyardRuntimeSpec">VineyardRuntimeSpec</a>)
+</p>
+<p>
+<p>VineyardCompTemplateSpec is the common configurations for vineyard components including Master and Worker.</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>replicas</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The replicas of Vineyard component.
+If not specified, defaults to 1.
+For worker, the replicas should not be greater than the number of nodes in the cluster</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>image</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The image of Vineyard component.
+For Master, the default image is <code>registry.aliyuncs.com/vineyard/vineyardd</code>
+For Worker, the default image is <code>registry.aliyuncs.com/vineyard/vineyardd</code>
+The default container registry is <code>docker.io</code>, you can change it by setting the image field</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imageTag</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The image tag of Vineyard component.
+For Master, the default image tag is <code>v0.22.2</code>.
+For Worker, the default image tag is <code>v0.22.2</code>.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>imagePullPolicy</code></br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The image pull policy of Vineyard component.
+Default is <code>IfNotPresent</code>.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>nodeSelector</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>NodeSelector is a selector to choose which nodes to launch the Vineyard component.
+E,g. {&ldquo;disktype&rdquo;: &ldquo;ssd&rdquo;}</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ports</code></br>
+<em>
+map[string]int
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ports used by Vineyard component.
+For Master, the default client port is 2379 and peer port is 2380.
+For Worker, the default rpc port is 9600 and the default exporter port is 9144.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>env</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Environment variables that will be used by Vineyard component.
+For Master, refer to <a href="https://etcd.io/docs/v3.5/op-guide/configuration/">Etcd Configuration</a> for more info
+Default is not set.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>options</code></br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Configurable options for Vineyard component.
+For Master, there is no configurable options.
+For Worker, support the following options.</p>
+<p>vineyardd.reserve.memory: (Bool) where to reserve memory for vineyardd
+If set to true, the memory quota will be counted to the vineyardd rather than the application.
+etcd.prefix: (String) the prefix of etcd key for vineyard objects
+wait.etcd.timeout: (String) the timeout period before waiting the etcd to be ready, in seconds</p>
+<p>Default value is as follows.</p>
+<pre><code>vineyardd.reserve.memory: &quot;true&quot;
+etcd.prefix: &quot;/vineyard&quot;
+wait.etcd.timeout: &quot;120&quot;
+</code></pre>
+</td>
+</tr>
+<tr>
+<td>
+<code>resources</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#resourcerequirements-v1-core">
+Kubernetes core/v1.ResourceRequirements
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Resources contains the resource requirements and limits for the Vineyard component.
+Default is not set.
+For Worker, when the options contains vineyardd.reserve.memory=true,
+the resources.request.memory for worker should be greater than tieredstore.levels[0].quota(aka vineyardd shared memory)</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumeMounts</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volumemount-v1-core">
+[]Kubernetes core/v1.VolumeMount
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>VolumeMounts specifies the volumes listed in &ldquo;.spec.volumes&rdquo; to mount into the vineyard runtime component&rsquo;s filesystem.
+It is useful for specifying a persistent storage.
+Default is not set.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to Vineyard&rsquo;s pods including Master and Worker.
+Default is not set.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>networkMode</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.NetworkMode">
+NetworkMode
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Whether to use hostnetwork or not
+Default is HostNetwork</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.VineyardRuntimeSpec">VineyardRuntimeSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.VineyardRuntime">VineyardRuntime</a>)
+</p>
+<p>
+<p>VineyardRuntimeSpec defines the desired state of VineyardRuntime</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>master</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.MasterSpec">
+MasterSpec
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Master holds the configurations for Vineyard Master component
+Represents the Etcd component in Vineyard</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>worker</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.VineyardCompTemplateSpec">
+VineyardCompTemplateSpec
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Worker holds the configurations for Vineyard Worker component
+Represents the Vineyardd component in Vineyard</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>replicas</code></br>
+<em>
+int32
+</em>
+</td>
+<td>
+<p>The replicas of the worker, need to be specified
+If worker.replicas and the field are both specified, the field will be respected</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>fuse</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.VineyardClientSocketSpec">
+VineyardClientSocketSpec
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Fuse holds the configurations for Vineyard client socket.
+Note that the &ldquo;Fuse&rdquo; here is kept just for API consistency, VineyardRuntime mount a socket file instead of a FUSE filesystem to make data cache available.
+Applications can connect to the vineyard runtime components through IPC or RPC.
+IPC is the default way to connect to vineyard runtime components, which is more efficient than RPC.
+If the socket file is not mounted, the connection will fall back to RPC.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>tieredstore</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.TieredStore">
+TieredStore
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Tiered storage used by vineyardd
+The MediumType can only be <code>MEM</code> and <code>SSD</code>
+<code>MEM</code> actually represents the shared memory of vineyardd.
+<code>SSD</code> represents the external storage of vineyardd.
+Default is as follows.
+tieredstore:
+levels:
+- level: 0
+mediumtype: MEM
+quota: 4Gi</p>
+<p>Choose hostpath as the external storage of vineyardd.
+tieredstore:
+levels:
+- level: 0
+mediumtype: MEM
+quota: 4Gi
+high: &ldquo;0.8&rdquo;
+low: &ldquo;0.3&rdquo;
+- level: 1
+mediumtype: SSD
+quota: 10Gi
+volumeType: Hostpath
+path: /var/spill-path</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>disablePrometheus</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Disable monitoring metrics for Vineyard Runtime
+Default is false</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>podMetadata</code></br>
+<em>
+<a href="#data.fluid.io/v1alpha1.PodMetadata">
+PodMetadata
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PodMetadata defines labels and annotations that will be propagated to Vineyard&rsquo;s pods.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>volumes</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volume-v1-core">
+[]Kubernetes core/v1.Volume
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Volumes is the list of Kubernetes volumes that can be mounted by the vineyard components (Master and Worker).
+Default is null.</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.VolumeSource">VolumeSource
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.Level">Level</a>)
+</p>
+<p>
+<p>VolumeSource defines volume source and volume claim template.</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>VolumeSource</code></br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#volumesource-v1-core">
+Kubernetes core/v1.VolumeSource
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>VolumeSource</code> are embedded into this type.)
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data.fluid.io/v1alpha1.WaitingStatus">WaitingStatus
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#data.fluid.io/v1alpha1.OperationStatus">OperationStatus</a>)
+</p>
+<p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>operationComplete</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<p>OperationComplete indicates if the preceding operation is complete</p>
+</td>
+</tr>
+</tbody>
+</table>
 <hr/>
 <p><em>
 Generated with <code>gen-crd-api-reference-docs</code>
-on git commit <code>4dd8c8ee</code>.
+on git commit <code>fc07663</code>.
 </em></p>

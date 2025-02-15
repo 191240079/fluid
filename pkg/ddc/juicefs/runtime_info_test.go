@@ -19,20 +19,20 @@ package juicefs
 import (
 	"testing"
 
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 )
 
 func newJuiceFSEngineRT(client client.Client, name string, namespace string, withRuntimeInfo bool, unittest bool) *JuiceFSEngine {
-	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, "alluxio", datav1alpha1.TieredStore{})
+	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, common.JuiceFSRuntime)
 	engine := &JuiceFSEngine{
 		runtime:     &datav1alpha1.JuiceFSRuntime{},
 		name:        name,
@@ -40,7 +40,7 @@ func newJuiceFSEngineRT(client client.Client, name string, namespace string, wit
 		Client:      client,
 		runtimeInfo: nil,
 		UnitTest:    unittest,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 	}
 
 	if withRuntimeInfo {
@@ -57,9 +57,7 @@ func TestJuiceFSEngine_getRuntimeInfo(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: datav1alpha1.JuiceFSRuntimeSpec{
-				Fuse: datav1alpha1.JuiceFSFuseSpec{
-					Global: true,
-				},
+				Fuse: datav1alpha1.JuiceFSFuseSpec{},
 			},
 		},
 		{
@@ -68,9 +66,7 @@ func TestJuiceFSEngine_getRuntimeInfo(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: datav1alpha1.JuiceFSRuntimeSpec{
-				Fuse: datav1alpha1.JuiceFSFuseSpec{
-					Global: false,
-				},
+				Fuse: datav1alpha1.JuiceFSFuseSpec{},
 			},
 		},
 	}

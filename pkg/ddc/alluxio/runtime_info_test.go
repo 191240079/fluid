@@ -1,9 +1,26 @@
+/*
+Copyright 2021 The Fluid Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package alluxio
 
 import (
 	"testing"
 
 	"github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	v1 "k8s.io/api/apps/v1"
@@ -11,11 +28,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func newAlluxioEngineRT(client client.Client, name string, namespace string, withRuntimeInfo bool, unittest bool) *AlluxioEngine {
-	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, "alluxio", v1alpha1.TieredStore{})
+	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, common.AlluxioRuntime)
 	engine := &AlluxioEngine{
 		runtime:     &v1alpha1.AlluxioRuntime{},
 		name:        name,
@@ -23,7 +39,7 @@ func newAlluxioEngineRT(client client.Client, name string, namespace string, wit
 		Client:      client,
 		runtimeInfo: nil,
 		UnitTest:    unittest,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 	}
 
 	if withRuntimeInfo {
@@ -40,9 +56,7 @@ func TestGetRuntimeInfo(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: v1alpha1.AlluxioRuntimeSpec{
-				Fuse: v1alpha1.AlluxioFuseSpec{
-					Global: true,
-				},
+				Fuse: v1alpha1.AlluxioFuseSpec{},
 			},
 		},
 		{
@@ -51,9 +65,7 @@ func TestGetRuntimeInfo(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: v1alpha1.AlluxioRuntimeSpec{
-				Fuse: v1alpha1.AlluxioFuseSpec{
-					Global: false,
-				},
+				Fuse: v1alpha1.AlluxioFuseSpec{},
 			},
 		},
 	}

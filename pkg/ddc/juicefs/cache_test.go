@@ -17,27 +17,29 @@ limitations under the License.
 package juicefs
 
 import (
-	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"testing"
 
-	. "github.com/agiledragon/gomonkey"
+	"k8s.io/apimachinery/pkg/api/resource"
+
+	. "github.com/agiledragon/gomonkey/v2"
 	. "github.com/smartystreets/goconvey/convey"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 )
 
 func TestJuiceFSEngine_queryCacheStatus(t *testing.T) {
-	Convey("Test CleanupCache ", t, func() {
-		Convey("cleanup success", func() {
-			runtimeInfo, err := base.BuildRuntimeInfo("juicefs", "fluid", "juicefs", datav1alpha1.TieredStore{})
+	Convey("Test queryCacheStatus ", t, func() {
+		Convey("queryCacheStatus success", func() {
+			runtimeInfo, err := base.BuildRuntimeInfo("juicefs", "fluid", common.JuiceFSRuntime)
 			if err != nil {
 				t.Errorf("fail to create the runtimeInfo with error %v", err)
 			}
-			runtimeInfo.SetupFuseDeployMode(false, nil)
 			var engine *JuiceFSEngine
 			patch1 := ApplyMethod(reflect.TypeOf(engine), "GetRunningPodsOfDaemonset",
 				func(_ *JuiceFSEngine, dsName string, namespace string) ([]corev1.Pod, error) {
@@ -46,28 +48,48 @@ func TestJuiceFSEngine_queryCacheStatus(t *testing.T) {
 				})
 			defer patch1.Reset()
 			patch2 := ApplyMethod(reflect.TypeOf(engine), "GetPodMetrics",
-				func(_ *JuiceFSEngine, podName string) (string, error) {
+				func(_ *JuiceFSEngine, podName, containerName string) (string, error) {
 					return mockJuiceFSMetric(), nil
 				})
 			defer patch2.Reset()
+			patch3 := ApplyMethod(reflect.TypeOf(engine), "GetRunningPodsOfStatefulSet",
+				func(_ *JuiceFSEngine, stsName string, namespace string) ([]corev1.Pod, error) {
+					r := mockRunningPodsOfStatefulSet()
+					return r, nil
+				})
+			defer patch3.Reset()
+			patch4 := ApplyMethod(reflect.TypeOf(engine), "GetEdition",
+				func(_ *JuiceFSEngine) string {
+					return "enterprise"
+				})
+			defer patch4.Reset()
 
 			a := &JuiceFSEngine{
 				name:        "test",
 				namespace:   "default",
 				runtimeType: "JuiceFSRuntime",
-				Log:         nil,
+				Log:         fake.NullLogger(),
 				runtimeInfo: runtimeInfo,
 				runtime: &datav1alpha1.JuiceFSRuntime{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
 						Namespace: "fluid",
 					},
+					Spec: datav1alpha1.JuiceFSRuntimeSpec{
+						Replicas: 1,
+						Worker: datav1alpha1.JuiceFSCompTemplateSpec{Options: map[string]string{
+							"cache-size": "102400",
+						}},
+					},
+					Status: datav1alpha1.RuntimeStatus{
+						WorkerNumberReady: 1,
+					},
 				},
 			}
 			want := cacheStates{
-				cacheCapacity:        "",
-				cached:               "387.17KiB",
-				cachedPercentage:     "151.2%",
+				cacheCapacity:        "100.00GiB",
+				cached:               "37.96GiB",
+				cachedPercentage:     "0.0%",
 				cacheHitRatio:        "100.0%",
 				cacheThroughputRatio: "100.0%",
 			}
@@ -79,18 +101,18 @@ func TestJuiceFSEngine_queryCacheStatus(t *testing.T) {
 				t.Errorf("got=%v, want=%v", got, want)
 			}
 		})
-		Convey("cleanup", func() {
-			runtimeInfo, err := base.BuildRuntimeInfo("juicefs", "fluid", "juicefs", datav1alpha1.TieredStore{
+		Convey("queryCacheStatus", func() {
+			tieredStore := datav1alpha1.TieredStore{
 				Levels: []datav1alpha1.Level{{
 					MediumType: "MEM",
 					Path:       "/data",
 					Quota:      resource.NewQuantity(100, resource.BinarySI),
 				}},
-			})
+			}
+			runtimeInfo, err := base.BuildRuntimeInfo("juicefs", "fluid", "juicefs", base.WithTieredStore(tieredStore))
 			if err != nil {
 				t.Errorf("fail to create the runtimeInfo with error %v", err)
 			}
-			runtimeInfo.SetupFuseDeployMode(false, nil)
 			var engine *JuiceFSEngine
 			patch1 := ApplyMethod(reflect.TypeOf(engine), "GetRunningPodsOfDaemonset",
 				func(_ *JuiceFSEngine, dsName string, namespace string) ([]corev1.Pod, error) {
@@ -99,16 +121,27 @@ func TestJuiceFSEngine_queryCacheStatus(t *testing.T) {
 				})
 			defer patch1.Reset()
 			patch2 := ApplyMethod(reflect.TypeOf(engine), "GetPodMetrics",
-				func(_ *JuiceFSEngine, podName string) (string, error) {
+				func(_ *JuiceFSEngine, podName, containerName string) (string, error) {
 					return mockJuiceFSMetric(), nil
 				})
 			defer patch2.Reset()
+			patch3 := ApplyMethod(reflect.TypeOf(engine), "GetRunningPodsOfStatefulSet",
+				func(_ *JuiceFSEngine, stsName string, namespace string) ([]corev1.Pod, error) {
+					r := mockRunningPodsOfStatefulSet()
+					return r, nil
+				})
+			defer patch3.Reset()
+			patch4 := ApplyMethod(reflect.TypeOf(engine), "GetEdition",
+				func(_ *JuiceFSEngine) string {
+					return "enterprise"
+				})
+			defer patch4.Reset()
 
 			a := &JuiceFSEngine{
 				name:        "test",
 				namespace:   "default",
 				runtimeType: "JuiceFSRuntime",
-				Log:         nil,
+				Log:         fake.NullLogger(),
 				runtimeInfo: runtimeInfo,
 				runtime: &datav1alpha1.JuiceFSRuntime{
 					ObjectMeta: metav1.ObjectMeta{
@@ -119,8 +152,8 @@ func TestJuiceFSEngine_queryCacheStatus(t *testing.T) {
 			}
 			want := cacheStates{
 				cacheCapacity:        "",
-				cached:               "387.17KiB",
-				cachedPercentage:     "151.2%",
+				cached:               "37.96GiB",
+				cachedPercentage:     "0.0%",
 				cacheHitRatio:        "100.0%",
 				cacheThroughputRatio: "100.0%",
 			}

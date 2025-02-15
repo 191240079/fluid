@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Author.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,11 +18,20 @@ package alluxio
 
 import (
 	"fmt"
-
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/alluxio/operations"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"os"
 )
+
+func IsMountWithConfigMap() bool {
+	if envVal, exists := os.LookupEnv(MountConfigStorage); exists {
+		return envVal == ConfigmapStorageName
+	}
+	// default value
+	return true
+}
 
 // UsedStorageBytes returns used storage size of Alluxio in bytes
 func (e *AlluxioEngine) UsedStorageBytes() (value int64, err error) {
@@ -56,20 +66,41 @@ func (e *AlluxioEngine) ShouldCheckUFS() (should bool, err error) {
 
 // PrepareUFS does all the UFS preparations
 func (e *AlluxioEngine) PrepareUFS() (err error) {
-	// 1. Mount UFS (Synchronous Operation)
-	shouldMountUfs, err := e.shouldMountUFS()
-	if err != nil {
-		return
-	}
-	e.Log.Info("shouldMountUFS", "should", shouldMountUfs)
-
-	if shouldMountUfs {
-		err = e.mountUFS()
+	// if using configmap to store mount info, no need to execute ufs mount in alluxio master pod in `Setup` phase.
+	usingConfigMap := IsMountWithConfigMap()
+	if !usingConfigMap {
+		// 1. Mount UFS (Synchronous Operation)
+		shouldMountUfs, err := e.shouldMountUFS()
 		if err != nil {
-			return
+			return err
+		}
+		e.Log.Info("shouldMountUFS", "should", shouldMountUfs)
+
+		if shouldMountUfs {
+			err = e.mountUFS()
+			if err != nil {
+				return err
+			}
+		}
+		e.Log.Info("mountUFS")
+	} else {
+		// for multiple master, can not use startup probe/post start, mount in the controller.
+		runtime, err := e.getRuntime()
+		if err != nil {
+			return err
+		}
+		replicas := runtime.Spec.Master.Replicas
+		if replicas > 1 {
+			// Mount UFS (Synchronous Operation)
+			podName, containerName := e.getMasterPodInfo()
+			fileUtils := operations.NewAlluxioFileUtils(podName, containerName, e.namespace, e.Log)
+			err = fileUtils.ExecMountScripts()
+			if err != nil {
+				return err
+			}
+			e.Log.Info("mountUFS for ha master")
 		}
 	}
-	e.Log.Info("mountUFS")
 
 	err = e.SyncMetadata()
 	if err != nil {
@@ -116,12 +147,12 @@ func (e *AlluxioEngine) UpdateOnUFSChange(ufsToUpdate *utils.UFSToUpdate) (updat
 	}
 
 	// 3. process added and removed
-	err = e.processUpdatingUFS(ufsToUpdate)
+	updateReady, err = e.processUpdatingUFS(ufsToUpdate)
 	if err != nil {
 		e.Log.Error(err, "Failed to add or remove mount points")
 		return
 	}
-	updateReady = true
+
 	return
 }
 
@@ -143,7 +174,7 @@ func (e *AlluxioEngine) checkIfRemountRequired(ufsToUpdate *utils.UFSToUpdate) {
 	for _, containerStatus := range masterPod.Status.ContainerStatuses {
 		if containerStatus.Name == masterContainerName {
 			if containerStatus.State.Running == nil {
-				e.Log.Error(fmt.Errorf("Container is not running"), "checkIfRemountRequired", "master pod", masterPodName)
+				e.Log.Error(fmt.Errorf("container is not running"), "checkIfRemountRequired", "master pod", masterPodName)
 				return
 			} else {
 				startedAt = &containerStatus.State.Running.StartedAt
@@ -153,7 +184,7 @@ func (e *AlluxioEngine) checkIfRemountRequired(ufsToUpdate *utils.UFSToUpdate) {
 	}
 
 	// If mounttime is earlier than master container starttime, remount is necessary
-	if startedAt != nil && runtime.Status.MountTime.Before(startedAt) {
+	if startedAt != nil && runtime.Status.MountTime != nil && runtime.Status.MountTime.Before(startedAt) {
 		e.Log.Info("remount on master restart", "alluxioruntime", e.name)
 
 		unmountedPaths, err := e.FindUnmountedUFS()

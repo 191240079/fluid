@@ -1,4 +1,5 @@
 /*
+Copyright 2022 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,9 +21,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"strings"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
@@ -36,15 +39,18 @@ const (
 )
 
 type driver struct {
-	client           client.Client
-	apiReader        client.Reader
-	csiDriver        *csicommon.CSIDriver
-	nodeId, endpoint string
+	client               client.Client
+	apiReader            client.Reader
+	nodeAuthorizedClient *kubernetes.Clientset
+	csiDriver            *csicommon.CSIDriver
+	nodeId, endpoint     string
+
+	locks *utils.VolumeLocks
 }
 
 var _ manager.Runnable = &driver{}
 
-func NewDriver(nodeID, endpoint string, client client.Client, apiReader client.Reader) *driver {
+func NewDriver(nodeID, endpoint string, client client.Client, apiReader client.Reader, nodeAuthorizedClient *kubernetes.Clientset, locks *utils.VolumeLocks) *driver {
 	glog.Infof("Driver: %v version: %v", driverName, version)
 
 	proto, addr := utils.SplitSchemaAddr(endpoint)
@@ -66,11 +72,13 @@ func NewDriver(nodeID, endpoint string, client client.Client, apiReader client.R
 	csiDriver.AddVolumeCapabilityAccessModes([]csi.VolumeCapability_AccessMode_Mode{csi.VolumeCapability_AccessMode_MULTI_NODE_MULTI_WRITER})
 
 	return &driver{
-		nodeId:    nodeID,
-		endpoint:  endpoint,
-		csiDriver: csiDriver,
-		client:    client,
-		apiReader: apiReader,
+		nodeId:               nodeID,
+		endpoint:             endpoint,
+		csiDriver:            csiDriver,
+		client:               client,
+		nodeAuthorizedClient: nodeAuthorizedClient,
+		apiReader:            apiReader,
+		locks:                locks,
 	}
 }
 
@@ -82,10 +90,12 @@ func (d *driver) newControllerServer() *controllerServer {
 
 func (d *driver) newNodeServer() *nodeServer {
 	return &nodeServer{
-		nodeId:            d.nodeId,
-		DefaultNodeServer: csicommon.NewDefaultNodeServer(d.csiDriver),
-		client:            d.client,
-		apiReader:         d.apiReader,
+		nodeId:               d.nodeId,
+		DefaultNodeServer:    csicommon.NewDefaultNodeServer(d.csiDriver),
+		client:               d.client,
+		apiReader:            d.apiReader,
+		nodeAuthorizedClient: d.nodeAuthorizedClient,
+		locks:                d.locks,
 	}
 }
 

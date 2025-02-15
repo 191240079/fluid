@@ -19,28 +19,29 @@ package juicefs
 import (
 	"testing"
 
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
+	"github.com/fluid-cloudnative/fluid/pkg/utils"
 )
 
 func getTestJuiceFSEngine(client client.Client, name string, namespace string) *JuiceFSEngine {
 	runTime := &datav1alpha1.JuiceFSRuntime{}
-	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, "juicefs", datav1alpha1.TieredStore{})
+	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, common.JuiceFSRuntime)
 	engine := &JuiceFSEngine{
 		runtime:     runTime,
 		name:        name,
 		namespace:   namespace,
 		Client:      client,
 		runtimeInfo: runTimeInfo,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 	}
 	return engine
 }
@@ -136,10 +137,8 @@ func TestJuiceFSEngine_getDeprecatedCommonLabelName(t *testing.T) {
 			out:       "data.fluid.io/storage-test-fluid",
 		},
 	}
-	fakeClient := fake.NewFakeClientWithScheme(testScheme)
 	for _, test := range testCases {
-		engine := getTestJuiceFSEngine(fakeClient, test.name, test.namespace)
-		out := engine.getDeprecatedCommonLabelName()
+		out := utils.GetCommonLabelName(true, test.namespace, test.name, "")
 		if out != test.out {
 			t.Errorf("input parameter is %s-%s,expected %s, got %s", test.namespace, test.name, test.out, out)
 		}

@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,12 +31,15 @@ import (
 type ReconcileRequestContext struct {
 	context.Context
 	types.NamespacedName
-	Log logr.Logger
-	*datav1alpha1.Dataset
-	Recorder record.EventRecorder
-	client.Client
-	RuntimeType   string
-	FinalizerName string
 	common.Category
+	*datav1alpha1.Dataset
 	Runtime client.Object
+
+	RuntimeType   string
+	EngineImpl    string
+	FinalizerName string
+
+	client.Client
+	Log      logr.Logger
+	Recorder record.EventRecorder
 }

@@ -1,4 +1,5 @@
 /*
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -44,11 +45,13 @@ func (e *AlluxioEngine) queryCacheStatus() (states cacheStates, err error) {
 	}
 
 	// parse alluxio fsadmin report summary
-	states = e.ParseReportSummary(summary)
+	states = e.parseReportSummary(summary)
 
 	dataset, err := utils.GetDataset(e.Client, e.name, e.namespace)
 	if err != nil {
-		e.Log.Error(err, "Failed to get dataset when query cache status")
+		if utils.IgnoreNotFound(err) != nil {
+			e.Log.Error(err, "Failed to get dataset when query cache status")
+		}
 		return states, err
 	}
 
@@ -66,7 +69,7 @@ func (e AlluxioEngine) patchDatasetStatus(dataset *v1alpha1.Dataset, states *cac
 		return
 	}
 	// skip when `dataset.Status.UfsTotal` is "[Calculating]"
-	if dataset.Status.UfsTotal == METADATA_SYNC_NOT_DONE_MSG {
+	if dataset.Status.UfsTotal == metadataSyncNotDoneMsg {
 		return
 	}
 
@@ -77,11 +80,11 @@ func (e AlluxioEngine) patchDatasetStatus(dataset *v1alpha1.Dataset, states *cac
 
 }
 
-// getCacheHitStates gets cache hit related info by parsing Alluxio metrics
+// GetCacheHitStates gets cache hit related info by parsing Alluxio metrics
 func (e *AlluxioEngine) GetCacheHitStates() (cacheHitStates cacheHitStates) {
-	// get cache hit states every 1 minute(CACHE_HIT_QUERY_INTERVAL_MIN * 20s)
+	// get cache hit states every 1 minute(cacheHitQueryIntervalMin * 20s)
 	cacheHitStates.timestamp = time.Now()
-	if e.lastCacheHitStates != nil && cacheHitStates.timestamp.Sub(e.lastCacheHitStates.timestamp).Minutes() < CACHE_HIT_QUERY_INTERVAL_MIN {
+	if e.lastCacheHitStates != nil && cacheHitStates.timestamp.Sub(e.lastCacheHitStates.timestamp).Minutes() < cacheHitQueryIntervalMin {
 		return *e.lastCacheHitStates
 	}
 
@@ -194,7 +197,41 @@ func (e *AlluxioEngine) invokeCleanCache(path string) (err error) {
 
 	// 2. run clean action
 	podName, containerName := e.getMasterPodInfo()
-	fileUitls := operations.NewAlluxioFileUtils(podName, containerName, e.namespace, e.Log)
-	return fileUitls.CleanCache(path)
+	fileUtils := operations.NewAlluxioFileUtils(podName, containerName, e.namespace, e.Log)
+	cleanCacheGracePeriodSeconds, err := e.getCleanCacheGracePeriodSeconds()
+	if err != nil {
+		return err
+	}
+	return fileUtils.CleanCache(path, cleanCacheGracePeriodSeconds)
 
+}
+
+func (e *AlluxioEngine) getGracefulShutdownLimits() (gracefulShutdownLimits int32, err error) {
+	runtime, err := e.getRuntime()
+	if err != nil {
+		return
+	}
+
+	if runtime.Spec.RuntimeManagement.CleanCachePolicy.MaxRetryAttempts != nil {
+		gracefulShutdownLimits = *runtime.Spec.RuntimeManagement.CleanCachePolicy.MaxRetryAttempts
+	} else {
+		gracefulShutdownLimits = defaultGracefulShutdownLimits
+	}
+
+	return
+}
+
+func (e *AlluxioEngine) getCleanCacheGracePeriodSeconds() (cleanCacheGracePeriodSeconds int32, err error) {
+	runtime, err := e.getRuntime()
+	if err != nil {
+		return
+	}
+
+	if runtime.Spec.RuntimeManagement.CleanCachePolicy.GracePeriodSeconds != nil {
+		cleanCacheGracePeriodSeconds = *runtime.Spec.RuntimeManagement.CleanCachePolicy.GracePeriodSeconds
+	} else {
+		cleanCacheGracePeriodSeconds = defaultCleanCacheGracePeriodSeconds
+	}
+
+	return
 }

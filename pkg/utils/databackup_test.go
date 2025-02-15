@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Author.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -12,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package utils
 
 import (
@@ -245,34 +247,6 @@ func TestGetRpcPortFromMasterContainer(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if gotRpcPort := GetRpcPortFromMasterContainer(tt.args.container); gotRpcPort != tt.wantRpcPort {
 				t.Errorf("GetRpcPortFromMasterContainer() = %v, want %v", gotRpcPort, tt.wantRpcPort)
-			}
-		})
-	}
-}
-
-func TestGetDataBackupRef(t *testing.T) {
-	type args struct {
-		name      string
-		namespace string
-	}
-	tests := []struct {
-		name string
-		args args
-		want string
-	}{
-		{
-			name: "test",
-			args: args{
-				name:      "test",
-				namespace: "default",
-			},
-			want: "default-test",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := GetDataBackupRef(tt.args.name, tt.args.namespace); got != tt.want {
-				t.Errorf("GetDataBackupRef() = %v, want %v", got, tt.want)
 			}
 		})
 	}

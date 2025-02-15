@@ -18,10 +18,12 @@ package app
 
 import (
 	"os"
+	"time"
 	// +kubebuilder:scaffold:imports
 
 	"github.com/fluid-cloudnative/fluid"
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/controllers"
 	alluxioctl "github.com/fluid-cloudnative/fluid/pkg/controllers/v1alpha1/alluxio"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/alluxio"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
@@ -37,6 +39,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 var (
@@ -47,10 +50,23 @@ var (
 
 	metricsAddr             string
 	enableLeaderElection    bool
+	leaderElectionNamespace string
 	development             bool
 	portRange               string
 	maxConcurrentReconciles int
 	pprofAddr               string
+	portAllocatePolicy      string
+
+	kubeClientQPS   float32
+	kubeClientBurst int
+)
+
+// configuration for controllers' rate limiter
+var (
+	controllerWorkqueueDefaultSyncBackoffStr string
+	controllerWorkqueueMaxSyncBackoffStr     string
+	controllerWorkqueueQPS                   int
+	controllerWorkqueueBurst                 int
 )
 
 var alluxioCmd = &cobra.Command{
@@ -67,10 +83,18 @@ func init() {
 
 	alluxioCmd.Flags().StringVarP(&metricsAddr, "metrics-addr", "", ":8080", "The address the metric endpoint binds to.")
 	alluxioCmd.Flags().BoolVarP(&enableLeaderElection, "enable-leader-election", "", false, "Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+	alluxioCmd.Flags().StringVarP(&leaderElectionNamespace, "leader-election-namespace", "", "fluid-system", "The namespace in which the leader election resource will be created.")
 	alluxioCmd.Flags().BoolVarP(&development, "development", "", true, "Enable development mode for fluid controller.")
 	alluxioCmd.Flags().StringVar(&portRange, "runtime-node-port-range", "20000-25000", "Set available port range for Alluxio")
 	alluxioCmd.Flags().IntVar(&maxConcurrentReconciles, "runtime-workers", 3, "Set max concurrent workers for AlluxioRuntime controller")
 	alluxioCmd.Flags().StringVarP(&pprofAddr, "pprof-addr", "", "", "The address for pprof to use while exporting profiling results")
+	alluxioCmd.Flags().StringVar(&portAllocatePolicy, "port-allocate-policy", "random", "Set port allocating policy, available choice is bitmap or random(default random).")
+	alluxioCmd.Flags().Float32VarP(&kubeClientQPS, "kube-api-qps", "", 20, "QPS to use while talking with kubernetes apiserver.")   // 20 is the default qps in controller-runtime
+	alluxioCmd.Flags().IntVarP(&kubeClientBurst, "kube-api-burst", "", 30, "Burst to use while talking with kubernetes apiserver.") // 30 is the default burst in controller-runtime
+	alluxioCmd.Flags().StringVar(&controllerWorkqueueDefaultSyncBackoffStr, "workqueue-default-sync-backoff", "5ms", "base backoff period for failed reconciliation in controller's workqueue")
+	alluxioCmd.Flags().StringVar(&controllerWorkqueueMaxSyncBackoffStr, "workqueue-max-sync-backoff", "1000s", "max backoff period for failed reconciliation in controller's workqueue")
+	alluxioCmd.Flags().IntVar(&controllerWorkqueueQPS, "workqueue-qps", 10, "qps limit value for controller's workqueue")
+	alluxioCmd.Flags().IntVar(&controllerWorkqueueBurst, "workqueue-burst", 100, "burst limit value for controller's workqueue")
 }
 
 func handle() {
@@ -89,22 +113,39 @@ func handle() {
 		}
 	}))
 
-	utils.NewPprofServer(setupLog, pprofAddr)
+	utils.NewPprofServer(setupLog, pprofAddr, development)
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "7857424864.data.fluid.io",
-		Port:               9443,
+	// the default webhook server port is 9443, no need to set
+	mgr, err := ctrl.NewManager(controllers.GetConfigOrDieWithQPSAndBurst(kubeClientQPS, kubeClientBurst), ctrl.Options{
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		LeaderElection:          enableLeaderElection,
+		LeaderElectionNamespace: leaderElectionNamespace,
+		LeaderElectionID:        "alluxio.data.fluid.io",
+		NewClient:               controllers.NewFluidControllerClient,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start alluxioruntime manager")
 		os.Exit(1)
 	}
 
+	defaultSyncBackoff, err := time.ParseDuration(controllerWorkqueueDefaultSyncBackoffStr)
+	if err != nil {
+		setupLog.Error(err, "workqueue-default-sync-backoff is not a valid duration, please use string like \"100ms\", \"5s\", \"3m\", ...")
+		os.Exit(1)
+	}
+
+	maxSyncBackoff, err := time.ParseDuration(controllerWorkqueueMaxSyncBackoffStr)
+	if err != nil {
+		setupLog.Error(err, "workqueue-max-sync-backoff is not a valid duration, please use string like \"100ms\", \"5s\", \"3m\", ...)")
+		os.Exit(1)
+	}
+
 	controllerOptions := controller.Options{
 		MaxConcurrentReconciles: maxConcurrentReconciles,
+		RateLimiter:             controllers.NewFluidControllerRateLimiter(defaultSyncBackoff, maxSyncBackoff, controllerWorkqueueQPS, controllerWorkqueueBurst),
 	}
 
 	if err = (alluxioctl.NewRuntimeReconciler(mgr.GetClient(),
@@ -123,7 +164,12 @@ func handle() {
 	}
 	setupLog.Info("port range parsed", "port range", pr.String())
 
-	portallocator.SetupRuntimePortAllocator(mgr.GetClient(), pr, alluxio.GetReservedPorts)
+	err = portallocator.SetupRuntimePortAllocator(mgr.GetClient(), pr, portAllocatePolicy, alluxio.GetReservedPorts)
+	if err != nil {
+		setupLog.Error(err, "failed to setup runtime port allocator")
+		os.Exit(1)
+	}
+	setupLog.Info("Set up runtime port allocator", "policy", portAllocatePolicy)
 
 	setupLog.Info("starting alluxioruntime-controller")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

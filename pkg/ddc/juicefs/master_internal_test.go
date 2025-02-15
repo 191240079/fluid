@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Fluid Authors.
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,19 +21,20 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubectl"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/net"
 
 	"github.com/brahma-adshonor/gohook"
+	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base/portallocator"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/helm"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/helm"
 )
 
 var (
@@ -43,14 +44,12 @@ var (
 func init() {
 	testScheme = runtime.NewScheme()
 	_ = v1.AddToScheme(testScheme)
+	_ = rbacv1.AddToScheme(testScheme)
 	_ = datav1alpha1.AddToScheme(testScheme)
 	_ = appsv1.AddToScheme(testScheme)
 }
 
 func TestSetupMasterInternal(t *testing.T) {
-	mockCreateConfigMap := func(name string, key, fileName string, namespace string) (err error) {
-		return nil
-	}
 	mockExecCheckReleaseCommonFound := func(name string, namespace string) (exist bool, err error) {
 		return true, nil
 	}
@@ -124,25 +123,30 @@ func TestSetupMasterInternal(t *testing.T) {
 	}
 	client := fake.NewFakeClientWithScheme(testScheme, testObjs...)
 
+	runtimeInfo, err := base.BuildRuntimeInfo("hbase", "fluid", "juicefs")
+	if err != nil {
+		t.Errorf("fail to create the runtimeInfo with error %v", err)
+	}
+
 	engine := JuiceFSEngine{
 		name:      "test",
 		namespace: "fluid",
 		Client:    client,
-		Log:       log.NullLogger{},
+		Log:       fake.NullLogger(),
 		runtime: &datav1alpha1.JuiceFSRuntime{
 			Spec: datav1alpha1.JuiceFSRuntimeSpec{
 				Fuse: datav1alpha1.JuiceFSFuseSpec{},
 			},
 		},
+		runtimeInfo: runtimeInfo,
 	}
-	////portallocator.SetupRuntimePortAllocator(client, &net.PortRange{Base: 10, Size: 100}, GetReservedPorts)
-
-	// check release found
-	err := gohook.Hook(helm.CheckRelease, mockExecCheckReleaseCommonFound, nil)
+	err = portallocator.SetupRuntimePortAllocator(client, &net.PortRange{Base: 10, Size: 100}, "bitmap", GetReservedPorts)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	err = gohook.Hook(kubectl.CreateConfigMapFromFile, mockCreateConfigMap, nil)
+
+	// check release found
+	err = gohook.Hook(helm.CheckRelease, mockExecCheckReleaseCommonFound, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -154,10 +158,6 @@ func TestSetupMasterInternal(t *testing.T) {
 
 	// check release error
 	err = gohook.Hook(helm.CheckRelease, mockExecCheckReleaseErr, nil)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	err = gohook.Hook(kubectl.CreateConfigMapFromFile, mockCreateConfigMap, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -178,10 +178,6 @@ func TestSetupMasterInternal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	err = gohook.Hook(kubectl.CreateConfigMapFromFile, mockCreateConfigMap, nil)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
 	err = engine.setupMasterInternal()
 	if err == nil {
 		t.Errorf("fail to catch the error")
@@ -190,10 +186,6 @@ func TestSetupMasterInternal(t *testing.T) {
 
 	// install release successfully
 	err = gohook.Hook(helm.InstallRelease, mockExecInstallReleaseCommon, nil)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	err = gohook.Hook(kubectl.CreateConfigMapFromFile, mockCreateConfigMap, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -207,18 +199,6 @@ func TestSetupMasterInternal(t *testing.T) {
 }
 
 func TestGenerateJuiceFSValueFile(t *testing.T) {
-	mockCreateConfigMap := func(name string, key, fileName string, namespace string) (err error) {
-		return nil
-	}
-	mockCreateConfigMapErr := func(name string, key, fileName string, namespace string) (err error) {
-		return errors.New("create configMap error")
-	}
-	wrappedUnhookConfigMap := func() {
-		err := gohook.UnHook(kubectl.CreateConfigMapFromFile)
-		if err != nil {
-			t.Fatal(err.Error())
-		}
-	}
 	juicefsSecret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -274,35 +254,26 @@ func TestGenerateJuiceFSValueFile(t *testing.T) {
 
 	client := fake.NewFakeClientWithScheme(testScheme, testObjs...)
 
+	runtimeInfo, err := base.BuildRuntimeInfo("test", "fluid", "juicefs")
+	if err != nil {
+		t.Errorf("fail to create the runtimeInfo with error %v", err)
+	}
+
 	engine := JuiceFSEngine{
 		name:      "test",
 		namespace: "fluid",
 		Client:    client,
-		Log:       log.NullLogger{},
+		Log:       fake.NullLogger(),
 		runtime: &datav1alpha1.JuiceFSRuntime{
 			Spec: datav1alpha1.JuiceFSRuntimeSpec{
 				Fuse: datav1alpha1.JuiceFSFuseSpec{},
 			},
 		},
+		runtimeInfo: runtimeInfo,
 	}
 
-	err := gohook.Hook(kubectl.CreateConfigMapFromFile, mockCreateConfigMap, nil)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
 	_, err = engine.generateJuicefsValueFile(juicefsruntime)
 	if err != nil {
 		t.Errorf("fail to exec the function: %v", err)
 	}
-	wrappedUnhookConfigMap()
-
-	err = gohook.Hook(kubectl.CreateConfigMapFromFile, mockCreateConfigMapErr, nil)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	_, err = engine.generateJuicefsValueFile(juicefsruntime)
-	if err == nil {
-		t.Error("fail to mock error")
-	}
-	wrappedUnhookConfigMap()
 }

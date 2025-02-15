@@ -3,7 +3,9 @@ Copyright 2021 The Fluid Authors.
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,6 +18,7 @@ import (
 	"testing"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	v1 "k8s.io/api/apps/v1"
@@ -23,11 +26,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func newGooseEngineRT(client client.Client, name string, namespace string, withRuntimeInfo bool, unittest bool) *GooseFSEngine {
-	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, "goosefs", datav1alpha1.TieredStore{})
+	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, common.GooseFSRuntime)
 	engine := &GooseFSEngine{
 		runtime:     &datav1alpha1.GooseFSRuntime{},
 		name:        name,
@@ -35,7 +37,7 @@ func newGooseEngineRT(client client.Client, name string, namespace string, withR
 		Client:      client,
 		runtimeInfo: nil,
 		UnitTest:    unittest,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 	}
 
 	if withRuntimeInfo {
@@ -52,9 +54,7 @@ func TestGetRuntimeInfo(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: datav1alpha1.GooseFSRuntimeSpec{
-				Fuse: datav1alpha1.GooseFSFuseSpec{
-					Global: true,
-				},
+				Fuse: datav1alpha1.GooseFSFuseSpec{},
 			},
 		},
 		{
@@ -63,9 +63,7 @@ func TestGetRuntimeInfo(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: datav1alpha1.GooseFSRuntimeSpec{
-				Fuse: datav1alpha1.GooseFSFuseSpec{
-					Global: false,
-				},
+				Fuse: datav1alpha1.GooseFSFuseSpec{},
 			},
 		},
 	}

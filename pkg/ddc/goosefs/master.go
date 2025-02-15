@@ -1,4 +1,5 @@
 /*
+Copyright 2022 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -160,7 +161,7 @@ func (e *GooseFSEngine) SetupMaster() (err error) {
 		runtimeToUpdate.Status.Selector = e.getWorkerSelectors()
 
 		runtimeToUpdate.Status.DesiredMasterNumberScheduled = replicas
-		runtimeToUpdate.Status.ValueFileConfigmap = e.getConfigmapName()
+		runtimeToUpdate.Status.ValueFileConfigmap = e.getHelmValuesConfigMapName()
 
 		if len(runtimeToUpdate.Status.Conditions) == 0 {
 			runtimeToUpdate.Status.Conditions = []datav1alpha1.RuntimeCondition{}

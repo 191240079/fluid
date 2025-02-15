@@ -23,7 +23,19 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
     role: alluxio-fuse
+    {{- include "library.fluid.labels" . | nindent 4 }}
+  ownerReferences:
+  {{- if .Values.owner.enabled }}
+  - apiVersion: {{ .Values.owner.apiVersion }}
+    blockOwnerDeletion: {{ .Values.owner.blockOwnerDeletion }}
+    controller: {{ .Values.owner.controller }}
+    kind: {{ .Values.owner.kind }}
+    name: {{ .Values.owner.name }}
+    uid: {{ .Values.owner.uid }}
+  {{- end }}
 spec:
+  updateStrategy:
+    type: {{ .Values.fuse.updateStrategy.type }}
   selector:
     matchLabels:
       app: {{ template "alluxio.name" . }}
@@ -33,32 +45,51 @@ spec:
       role: alluxio-fuse
   template:
     metadata:
+      annotations:
+        sidecar.istio.io/inject: "false"
+      {{- if .Values.fuse.annotations }}
+      {{- range $key, $val := .Values.fuse.annotations }}
+        {{ $key | quote }}: {{ $val | quote }}
+      {{- end }}
+      {{- end }}
       labels:
+        sidecar.istio.io/inject: "false"
         app: {{ template "alluxio.name" . }}
         chart: {{ template "alluxio.chart" . }}
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
         role: alluxio-fuse
+        {{- include "library.fluid.labels" . | nindent 8 }}
+        {{- if .Values.fuse.labels }}
+        {{- range $key, $val := .Values.fuse.labels }}
+        {{ $key | quote }}: {{ $val | quote }}
+        {{- end }}
+        {{- end }}
     spec:
+      {{- if .Values.fuse.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.fuse.imagePullSecrets | nindent 8 }}
+      {{- else if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
       {{- if .Values.fuse.criticalPod }}
       priorityClassName: system-node-critical
       {{- end }}
       enableServiceLinks: false
+      {{- if .Values.fuse.hostNetwork }}
       hostNetwork: {{ .Values.fuse.hostNetwork }}
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
       hostPID: {{ .Values.fuse.hostPID }}
-      dnsPolicy: {{ .Values.fuse.dnsPolicy }}
       nodeSelector:
       {{- if .Values.fuse.nodeSelector }}
 {{ toYaml .Values.fuse.nodeSelector | trim | indent 8  }}
       {{- else if .Values.nodeSelector }}
 {{ toYaml .Values.nodeSelector | trim | indent 8  }}
       {{- end }}
-      {{- if .Values.tolerations }}
       tolerations:
-{{ toYaml .Values.tolerations | indent 8 }}
-      {{- end }}
-      securityContext:
-        fsGroup: {{ .Values.fuse.fsGroup }}
+        - operator: Exists
       initContainers:
         {{ if .Values.initUsers.enabled -}}
         - name: init-fuse
@@ -106,6 +137,12 @@ spec:
                 fieldPath: status.hostIP
           - name: ALLUXIO_CLIENT_JAVA_OPTS
             value: " -Dalluxio.user.hostname=${ALLUXIO_CLIENT_HOSTNAME} "
+          - name: FLUID_RUNTIME_TYPE
+            value: "alluxio"
+          - name: FLUID_RUNTIME_NS
+            value: {{ .Values.runtimeIdentity.namespace }}
+          - name: FLUID_RUNTIME_NAME
+            value: {{ .Values.runtimeIdentity.name }}
           {{- range $key, $value := .Values.fuse.env }}
           - name: "{{ $key }}"
             value: "{{ $value }}"
@@ -144,8 +181,11 @@ spec:
               mountPath: /opt/domain
               {{- end }}
               {{- if eq .Values.shortCircuit.policy "local" }}
-{{- include "alluxio.worker.tieredstoreVolumeMounts" . }}
+{{- include "alluxio.fuse.tieredstoreVolumeMounts" . }}
               {{- end }}
+            {{- end }}
+            {{- if .Values.fuse.volumeMounts }}
+{{ toYaml .Values.fuse.volumeMounts | indent 12 }}
             {{- end }}
       restartPolicy: Always
       volumes:
@@ -172,7 +212,10 @@ spec:
 {{- include "alluxio.worker.shortCircuit.volume" . }}
           {{- end }}
           {{- if eq .Values.shortCircuit.policy "local" }}
-{{- include "alluxio.worker.tieredstoreVolumes" . }}
+{{- include "alluxio.fuse.tieredstoreVolumes" . }}
           {{- end }}
+        {{- end }}
+        {{- if .Values.fuse.volumes }}
+{{ toYaml .Values.fuse.volumes | indent 8 }}
         {{- end }}
 {{- end }}

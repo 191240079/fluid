@@ -16,11 +16,12 @@ limitations under the License.
 package tieredstore
 
 import (
+	"testing"
+
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"testing"
 )
 
 func TestLen(t *testing.T) {
@@ -299,7 +300,7 @@ func TestGetLevelStorageMap(t *testing.T) {
 			"name",
 			"namespace",
 			"runtimeType",
-			item.tieredStore,
+			base.WithTieredStore(item.tieredStore),
 		)
 		if err != nil {
 			t.Errorf("%s cannot build the runtimeInfo", k)
@@ -396,7 +397,7 @@ func TestGetTieredLevel(t *testing.T) {
 			"name",
 			"namespace",
 			"runtimeType",
-			item.tieredStore,
+			base.WithTieredStore(item.tieredStore),
 		)
 		if err != nil {
 			t.Errorf("%s cannot build the runtimeInfo", k)

@@ -37,7 +37,7 @@ import (
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 	"github.com/fluid-cloudnative/fluid/pkg/utils/kubeclient"
-	utilpointer "k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 // GetWorkersAsStatefulset gets workers as statefulset object. if it returns deprecated errors, it indicates that
@@ -71,7 +71,7 @@ func (e *Helper) CheckWorkersHealthy(recorder record.EventRecorder, runtime base
 		unavailablePodNames []types.NamespacedName
 	)
 
-	if sts.Spec.Replicas == utilpointer.Int32Ptr(0) || sts.Status.ReadyReplicas > 0 {
+	if sts.Spec.Replicas == ptr.To[int32](0) || sts.Status.ReadyReplicas > 0 {
 		healthy = true
 	}
 
@@ -146,4 +146,47 @@ func (e *Helper) CheckWorkersHealthy(recorder record.EventRecorder, runtime base
 
 	return
 
+}
+
+func (e *Helper) GetWorkerNodes() (nodes []corev1.Node, err error) {
+	var (
+		nodeList = &corev1.NodeList{}
+		// runtimeLabel indicates the specific runtime pod is on the node
+		// e.g. fluid.io/s-alluxio-default-hbase=true
+		runtimeLabelKey = e.runtimeInfo.GetRuntimeLabelName()
+	)
+
+	labelNames := []string{runtimeLabelKey}
+	e.log.Info("check node labels", "labelNames", labelNames)
+	runtimeLabelSelector, err := labels.Parse(fmt.Sprintf("%s=true", runtimeLabelKey))
+	if err != nil {
+		return
+	}
+
+	err = e.client.List(context.TODO(), nodeList, &client.ListOptions{
+		LabelSelector: runtimeLabelSelector,
+	})
+	if err != nil {
+		return nodes, err
+	}
+
+	nodes = nodeList.Items
+	if len(nodes) == 0 {
+		e.log.Info("No node with runtime label is found")
+		return
+	} else {
+		e.log.Info("Find the runtime label for nodes", "len", len(nodes))
+	}
+
+	return
+}
+
+// GetIpAddressesOfWorker gets Ipaddresses from the Worker Node
+func (e *Helper) GetIpAddressesOfWorker() (ipAddresses []string, err error) {
+	nodes, err := e.GetWorkerNodes()
+	if err != nil {
+		return
+	}
+	ipAddresses = kubeclient.GetIpAddressesOfNodes(nodes)
+	return
 }

@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Fluid Authors.
+Copyright 2020 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,8 +18,10 @@ package base
 
 import (
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/dataoperation"
 	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 // Engine interface defines the interfaces that should be implemented
@@ -44,26 +46,30 @@ type Engine interface {
 	// Sync syncs the alluxio runtime
 	Sync(ctx cruntime.ReconcileRequestContext) error
 
-	// Dataloader
-	Dataloader
+	// Validate checks all spec fields of the Dataset and the Runtime
+	Validate(ctx cruntime.ReconcileRequestContext) (err error)
+
+	// DataOperator is a common interface for Data Operations like DataBackup/DataLoad/DataMigrate etc.
+	DataOperator
 }
 
-type Dataloader interface {
-	// LoadData generate dataload values and install helm chart
-	LoadData(ctx cruntime.ReconcileRequestContext, targetDataload datav1alpha1.DataLoad) (err error)
+// DataOperator is a common interface of TemplateEngine for Data Operations like DataBackup/DataLoad/DataMigrate etc.
+type DataOperator interface {
+	Operate(ctx cruntime.ReconcileRequestContext, opStatus *datav1alpha1.OperationStatus, operation dataoperation.OperationInterface) (ctrl.Result, error)
+}
 
-	// Check if runtime is ready
-	CheckRuntimeReady() (ready bool)
-
-	// Check existence of path
-	CheckExistenceOfPath(targetDataload datav1alpha1.DataLoad) (notExist bool, err error)
+// DataOperatorYamlGenerator is the implementation of DataOperator interface for runtime engine using TemplateEngine.
+type DataOperatorYamlGenerator interface {
+	GetDataOperationValueFile(ctx cruntime.ReconcileRequestContext, operation dataoperation.OperationInterface) (valueFileName string, err error)
 }
 
 // Implement is what the real engine should implement if it use the TemplateEngine
 type Implement interface {
 	UnderFileSystemService
 
-	// ShouldSetupMaster checks if the master ready
+	DataOperatorYamlGenerator
+
+	// CheckMasterReady checks if the master ready
 	CheckMasterReady() (ready bool, err error)
 
 	// CheckWorkersReady checks if the workers ready
@@ -102,9 +108,6 @@ type Implement interface {
 	// Shutdown and clean up the engine
 	Shutdown() error
 
-	// AssignNodesToCache picks up the nodes for replicas
-	AssignNodesToCache(desiredNum int32) (currentNum int32, err error)
-
 	// CheckRuntimeHealthy checks runtime healthy
 	CheckRuntimeHealthy() (err error)
 
@@ -129,17 +132,17 @@ type Implement interface {
 	// BindToDataset binds the engine to dataset
 	BindToDataset() (err error)
 
-	// CreateDataLoadJob creates the job to load data
-	CreateDataLoadJob(ctx cruntime.ReconcileRequestContext, targetDataload datav1alpha1.DataLoad) error
-
-	// checks if the runtime is ready
+	// CheckRuntimeReady checks if the runtime is ready
 	CheckRuntimeReady() (ready bool)
 
-	// Check existence of targetDataload path
-	CheckExistenceOfPath(targetDataload datav1alpha1.DataLoad) (notExist bool, err error)
+	// SyncRuntime syncs the runtime spec
+	SyncRuntime(ctx cruntime.ReconcileRequestContext) (changed bool, err error)
 
-	// Sync the scheduleInfo to cacheNodes
+	// SyncScheduleInfoToCacheNodes Sync the scheduleInfo to cacheNodes
 	SyncScheduleInfoToCacheNodes() (err error)
+
+	// Validate checks all spec fields of the Dataset and the Runtime
+	Validate(ctx cruntime.ReconcileRequestContext) (err error)
 }
 
 // UnderFileSystemService interface defines the interfaces that should be implemented

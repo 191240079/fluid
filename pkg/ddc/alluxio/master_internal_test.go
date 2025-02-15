@@ -21,25 +21,20 @@ import (
 	"testing"
 
 	"github.com/brahma-adshonor/gohook"
-	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
-	"github.com/fluid-cloudnative/fluid/pkg/ddc/base/portallocator"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/helm"
-	"github.com/fluid-cloudnative/fluid/pkg/utils/kubectl"
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/net"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base/portallocator"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
+	"github.com/fluid-cloudnative/fluid/pkg/utils/helm"
 )
 
 func TestSetupMasterInternal(t *testing.T) {
-	mockExecCreateConfigMapFromFileCommon := func(name string, key, fileName string, namespace string) (err error) {
-		return nil
-	}
-	mockExecCreateConfigMapFromFileErr := func(name string, key, fileName string, namespace string) (err error) {
-		return errors.New("fail to exec command")
-	}
 	mockExecCheckReleaseCommonFound := func(name string, namespace string) (exist bool, err error) {
 		return true, nil
 	}
@@ -56,12 +51,6 @@ func TestSetupMasterInternal(t *testing.T) {
 		return errors.New("fail to install dataload chart")
 	}
 
-	wrappedUnhookCreateConfigMapFromFile := func() {
-		err := gohook.UnHook(kubectl.CreateConfigMapFromFile)
-		if err != nil {
-			t.Fatal(err.Error())
-		}
-	}
 	wrappedUnhookCheckRelease := func() {
 		err := gohook.UnHook(helm.CheckRelease)
 		if err != nil {
@@ -97,11 +86,16 @@ func TestSetupMasterInternal(t *testing.T) {
 	}
 	client := fake.NewFakeClientWithScheme(testScheme, testObjs...)
 
+	runtimeInfo, err := base.BuildRuntimeInfo("hbase", "fluid", "alluxio")
+	if err != nil {
+		t.Errorf("fail to create the runtimeInfo with error %v", err)
+	}
+
 	engine := AlluxioEngine{
 		name:      "hbase",
 		namespace: "fluid",
 		Client:    client,
-		Log:       log.NullLogger{},
+		Log:       fake.NullLogger(),
 		runtime: &datav1alpha1.AlluxioRuntime{
 			Spec: datav1alpha1.AlluxioRuntimeSpec{
 				APIGateway: datav1alpha1.AlluxioCompTemplateSpec{
@@ -112,20 +106,10 @@ func TestSetupMasterInternal(t *testing.T) {
 				},
 			},
 		},
+		runtimeInfo: runtimeInfo,
 	}
-	portallocator.SetupRuntimePortAllocator(client, &net.PortRange{Base: 10, Size: 100}, GetReservedPorts)
-	err := gohook.Hook(kubectl.CreateConfigMapFromFile, mockExecCreateConfigMapFromFileErr, nil)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	err = engine.setupMasterInternal()
-	if err == nil {
-		t.Errorf("fail to catch the error")
-	}
-	wrappedUnhookCreateConfigMapFromFile()
 
-	// create configmap successfully
-	err = gohook.Hook(kubectl.CreateConfigMapFromFile, mockExecCreateConfigMapFromFileCommon, nil)
+	err = portallocator.SetupRuntimePortAllocator(client, &net.PortRange{Base: 10, Size: 100}, "bitmap", GetReservedPorts)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -181,28 +165,25 @@ func TestSetupMasterInternal(t *testing.T) {
 	}
 	wrappedUnhookInstallRelease()
 	wrappedUnhookCheckRelease()
-	wrappedUnhookCreateConfigMapFromFile()
 }
 
 func TestGenerateAlluxioValueFile(t *testing.T) {
-	mockExecCreateConfigMapFromFileCommon := func(name string, key, fileName string, namespace string) (err error) {
-		return nil
-	}
-	mockExecCreateConfigMapFromFileErr := func(name string, key, fileName string, namespace string) (err error) {
-		return errors.New("fail to exec command")
-	}
-
-	wrappedUnhookCreateConfigMapFromFile := func() {
-		err := gohook.UnHook(kubectl.CreateConfigMapFromFile)
-		if err != nil {
-			t.Fatal(err.Error())
-		}
-	}
-
 	allixioruntime := &datav1alpha1.AlluxioRuntime{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "hbase",
 			Namespace: "fluid",
+		},
+		Spec: datav1alpha1.AlluxioRuntimeSpec{
+			ImagePullSecrets: []corev1.LocalObjectReference{{Name: "secret-runtime"}},
+			Master: datav1alpha1.AlluxioCompTemplateSpec{
+				ImagePullSecrets: []corev1.LocalObjectReference{{Name: "secret-master"}},
+			},
+			Worker: datav1alpha1.AlluxioCompTemplateSpec{
+				ImagePullSecrets: []corev1.LocalObjectReference{{Name: "secret-worker"}},
+			},
+			Fuse: datav1alpha1.AlluxioFuseSpec{
+				ImagePullSecrets: []corev1.LocalObjectReference{{Name: "secret-fuse"}},
+			},
 		},
 	}
 	testObjs := []runtime.Object{}
@@ -222,11 +203,16 @@ func TestGenerateAlluxioValueFile(t *testing.T) {
 
 	client := fake.NewFakeClientWithScheme(testScheme, testObjs...)
 
+	runtimeInfo, err := base.BuildRuntimeInfo("hbase", "fluid", "alluxio")
+	if err != nil {
+		t.Errorf("fail to create the runtimeInfo with error %v", err)
+	}
+
 	engine := AlluxioEngine{
 		name:      "hbase",
 		namespace: "fluid",
 		Client:    client,
-		Log:       log.NullLogger{},
+		Log:       fake.NullLogger(),
 		runtime: &datav1alpha1.AlluxioRuntime{
 			Spec: datav1alpha1.AlluxioRuntimeSpec{
 				APIGateway: datav1alpha1.AlluxioCompTemplateSpec{
@@ -237,37 +223,33 @@ func TestGenerateAlluxioValueFile(t *testing.T) {
 				},
 			},
 		},
+		runtimeInfo: runtimeInfo,
 	}
 
-	portallocator.SetupRuntimePortAllocator(client, &net.PortRange{Base: 10, Size: 50}, GetReservedPorts)
-	err := gohook.Hook(kubectl.CreateConfigMapFromFile, mockExecCreateConfigMapFromFileErr, nil)
+	err = portallocator.SetupRuntimePortAllocator(client, &net.PortRange{Base: 10, Size: 50}, "bitmap", GetReservedPorts)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
+
 	_, err = engine.generateAlluxioValueFile(allixioruntime)
-	if err == nil {
+	if err != nil {
 		t.Errorf("fail to catch the error")
 	}
-	wrappedUnhookCreateConfigMapFromFile()
 
-	err = gohook.Hook(kubectl.CreateConfigMapFromFile, mockExecCreateConfigMapFromFileCommon, nil)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
+	// create it again still success
 	_, err = engine.generateAlluxioValueFile(allixioruntime)
 	if err != nil {
-		t.Errorf("fail to exec the function")
+		t.Errorf("fail to generateAlluxioValueFile %v", err)
 	}
-	wrappedUnhookCreateConfigMapFromFile()
 }
 
 func TestGetConfigmapName(t *testing.T) {
 	engine := AlluxioEngine{
-		name:        "hbase",
-		runtimeType: "alluxio",
+		name:       "hbase",
+		engineImpl: "alluxio",
 	}
 	expectedResult := "hbase-alluxio-values"
-	if engine.getConfigmapName() != expectedResult {
+	if engine.getHelmValuesConfigMapName() != expectedResult {
 		t.Errorf("fail to get the configmap name")
 	}
 }

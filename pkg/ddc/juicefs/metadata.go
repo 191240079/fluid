@@ -24,19 +24,9 @@ import (
 
 	"k8s.io/client-go/util/retry"
 
-	"github.com/fluid-cloudnative/fluid/pkg/common"
-	"github.com/fluid-cloudnative/fluid/pkg/ddc/juicefs/operations"
+	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	"github.com/fluid-cloudnative/fluid/pkg/utils"
 )
-
-// MetadataSyncResult describes result for asynchronous metadata sync
-type MetadataSyncResult struct {
-	Done      bool
-	StartTime time.Time
-	UfsTotal  string
-	FileNum   string
-	Err       error
-}
 
 // SyncMetadata syncs metadata if necessary
 func (j *JuiceFSEngine) SyncMetadata() (err error) {
@@ -77,18 +67,23 @@ func (j *JuiceFSEngine) shouldSyncMetadata() (should bool, err error) {
 // syncMetadataInternal does the actual work of metadata sync
 // At any time, there is at most one goroutine working on metadata sync. First call to
 // this function will start a goroutine including the following two steps:
-//   1. load metadata
-//   2. get total size of UFSs
+//  1. load metadata
+//  2. get total size of UFSs
+//
 // Any following calls to this function will try to get result of the working goroutine with a timeout, which
 // ensures the function won't block the following Sync operations(e.g. CheckAndUpdateRuntimeStatus) for a long time.
 func (j *JuiceFSEngine) syncMetadataInternal() (err error) {
 	if j.MetadataSyncDoneCh != nil {
 		// Either get result from channel or timeout
 		select {
-		case result := <-j.MetadataSyncDoneCh:
+		case result, ok := <-j.MetadataSyncDoneCh:
 			defer func() {
 				j.MetadataSyncDoneCh = nil
 			}()
+			if !ok {
+				j.Log.Info("Get empty result from a closed MetadataSyncDoneCh")
+				return
+			}
 			j.Log.Info("Get result from MetadataSyncDoneCh", "result", result)
 			if result.Done {
 				j.Log.Info("Metadata sync succeeded", "period", time.Since(result.StartTime))
@@ -105,6 +100,8 @@ func (j *JuiceFSEngine) syncMetadataInternal() (err error) {
 						if err != nil {
 							return
 						}
+						// Update dataset metrics after a suceessful status update
+						base.RecordDatasetMetrics(result, datasetToUpdate.Namespace, datasetToUpdate.Name, j.Log)
 					}
 					return
 				})
@@ -140,10 +137,10 @@ func (j *JuiceFSEngine) syncMetadataInternal() (err error) {
 		if err != nil {
 			j.Log.Error(err, "Failed to set UfsTotal to METADATA_SYNC_NOT_DONE_MSG")
 		}
-		j.MetadataSyncDoneCh = make(chan MetadataSyncResult)
-		go func(resultChan chan MetadataSyncResult) {
-			defer close(resultChan)
-			result := MetadataSyncResult{
+		j.MetadataSyncDoneCh = make(chan base.MetadataSyncResult)
+		go func(resultChan chan base.MetadataSyncResult) {
+			defer base.SafeClose(resultChan)
+			result := base.MetadataSyncResult{
 				StartTime: time.Now(),
 				UfsTotal:  "",
 			}
@@ -152,35 +149,10 @@ func (j *JuiceFSEngine) syncMetadataInternal() (err error) {
 				j.Log.Error(err, "Can't get dataset when syncing metadata", "name", j.name, "namespace", j.namespace)
 				result.Err = err
 				result.Done = false
-				resultChan <- result
-				return
-			}
-
-			j.Log.Info("Metadata Sync starts", "dataset namespace", j.namespace, "dataset name", j.name)
-
-			dsName := j.getFuseDaemonsetName()
-			pods, err := j.GetRunningPodsOfDaemonset(dsName, j.namespace)
-			if err != nil || len(pods) == 0 {
-				result.UfsTotal = ""
-				result.FileNum = ""
-				result.Done = true
-				resultChan <- result
-				return
-			}
-			for _, pod := range pods {
-				fileUtils := operations.NewJuiceFileUtils(pod.Name, common.JuiceFSFuseContainer, j.namespace, j.Log)
-
-				// load metadata
-				// ls -al /runtime-mnt/juicefs/namespace/name/juicefs-fuse/
-				err = fileUtils.LoadMetadataWithoutTimeout(j.getMountPoint())
-				if err != nil {
-					j.Log.Error(err, "LoadMetadata failed when syncing metadata", "name", j.name, "namespace", j.namespace)
-					result.Err = err
-					result.Done = false
-					resultChan <- result
-					return
+				if closed := base.SafeSend(resultChan, result); closed {
+					j.Log.Info("Recover from sending result to a closed channel", "result", result)
 				}
-
+				return
 			}
 
 			result.Done = true
@@ -205,7 +177,9 @@ func (j *JuiceFSEngine) syncMetadataInternal() (err error) {
 			} else {
 				result.Err = nil
 			}
-			resultChan <- result
+			if closed := base.SafeSend(resultChan, result); closed {
+				j.Log.Info("Recover from sending result to a closed channel", "result", result)
+			}
 		}(j.MetadataSyncDoneCh)
 	}
 

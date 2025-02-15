@@ -22,6 +22,7 @@ import (
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	"github.com/fluid-cloudnative/fluid/pkg/common"
+	"github.com/fluid-cloudnative/fluid/pkg/utils"
 )
 
 // 4. Transform the fuse
@@ -32,7 +33,7 @@ func (e *GooseFSEngine) transformFuse(runtime *datav1alpha1.GooseFSRuntime, data
 	tag := runtime.Spec.Fuse.ImageTag
 	imagePullPolicy := runtime.Spec.Fuse.ImagePullPolicy
 
-	value.Fuse.Image, value.Fuse.ImageTag, value.ImagePullPolicy = e.parseFuseImage(image, tag, imagePullPolicy)
+	value.Fuse.Image, value.Fuse.ImageTag, value.Fuse.ImagePullPolicy = e.parseFuseImage(image, tag, imagePullPolicy)
 
 	if len(runtime.Spec.Fuse.Properties) > 0 {
 		value.Fuse.Properties = runtime.Spec.Fuse.Properties
@@ -86,8 +87,9 @@ func (e *GooseFSEngine) transformFuse(runtime *datav1alpha1.GooseFSRuntime, data
 		value.Fuse.NodeSelector = map[string]string{}
 	}
 
-	value.Fuse.NodeSelector[e.getFuseLabelname()] = "true"
+	value.Fuse.NodeSelector[utils.GetFuseLabelName(runtime.Namespace, runtime.Name, e.runtimeInfo.GetOwnerDatasetUID())] = "true"
 	value.Fuse.HostNetwork = true
+	value.Fuse.HostPID = common.HostPIDEnabled(runtime.Annotations)
 	value.Fuse.Enabled = true
 
 	e.transformResourcesForFuse(runtime, value)

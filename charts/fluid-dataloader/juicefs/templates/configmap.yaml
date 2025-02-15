@@ -5,6 +5,7 @@ metadata:
   labels:
     release: {{ .Release.Name }}
     role: dataload-job
+    {{- include "library.fluid.labels" . | nindent 4 }}
 data:
   dataloader.distributedLoad: |
     #!/usr/bin/env bash
@@ -12,7 +13,7 @@ data:
 
     function main() {
         paths="$DATA_PATH"
-        paths=(${paths//:/ })
+        paths=(${paths// / })
 
         targetPath=""
         for((j=0;j<${#paths[@]};j++)) do
@@ -23,12 +24,31 @@ data:
         podNames=(${podNames//:/ })
 
         ns="$POD_NAMESPACE"
+    
+        checkPathResult=$(/usr/local/bin/kubectl -n $ns exec -it "${podNames[0]}" -- timeout 30s /bin/ls $targetPath |& head -3)
+        strUnexistence="No such file or directory"
+        if [[ $checkPathResult =~ $strUnexistence ]]; then
+            echo -e "dataLoad failed because some paths not exist."
+            exit 1
+        fi
+    
+        if [ $EDITION == 'community' ]
+        then
         for((i=0;i<${#podNames[@]};i++)) do
           local pod="${podNames[i]}"
 
           echo -e "juicefs warmup on $pod $targetPath starts"
-          /usr/local/bin/kubectl -n $ns exec -it $pod -- timeout $TIMEOUT juicefs warmup $targetPath
+          /usr/local/bin/kubectl -n $ns exec -it $pod -- timeout $TIMEOUT /usr/local/bin/juicefs warmup $targetPath
           echo -e "juicefs warmup on $pod $targetPath ends"
         done
+        fi
+
+        if [ $EDITION == 'enterprise' ]
+        then
+          echo -e "juicefs warmup $targetPath starts"
+          local pod="${podNames[0]}"
+          /usr/local/bin/kubectl -n $ns exec -it $pod -- timeout $TIMEOUT /usr/bin/juicefs warmup $targetPath
+          echo -e "juicefs warmup $targetPath ends"
+        fi
     }
     main "$@"

@@ -5,7 +5,6 @@
 {{- $isUfsLocal := and (eq .Values.journal.type "UFS") (eq .Values.journal.ufsType "local") }}
 {{- $needJournalVolume := or $isEmbedded $isUfsLocal }}
 {{- $hostNetwork := .Values.master.hostNetwork }}
-{{- $hostPID := .Values.master.hostPID }}
 {{- $name := include "goosefs.name" . }}
 {{- $fullName := include "goosefs.fullname" . }}
 {{- $chart := include "goosefs.chart" . }}
@@ -21,6 +20,7 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
     role: goosefs-master
+    {{- include "library.fluid.labels" . | nindent 4 }}
 spec:
   selector:
     matchLabels:
@@ -31,21 +31,23 @@ spec:
   replicas: {{ $masterCount }}
   template:
     metadata:
-      {{- if .Values.master.annotations }}
       annotations:
+        sidecar.istio.io/inject: "false"
+      {{- if .Values.master.annotations }}
 {{ toYaml .Values.master.annotations | trim | indent 8  }}
       {{- end }}
       labels:
+        sidecar.istio.io/inject: "false"
         name: {{ $fullName }}-master
         app: {{ $name }}
         chart: {{ $chart }}
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
         role: goosefs-master
+        {{- include "library.fluid.labels" . | nindent 8 }}
     spec:
       enableServiceLinks: false
       hostNetwork: {{ $hostNetwork }}
-      hostPID: {{ .Values.master.hostPID }}
       dnsPolicy: {{ .Values.master.dnsPolicy | default ($hostNetwork | ternary "ClusterFirstWithHostNet" "ClusterFirst") }}
       nodeSelector:
       {{- if .Values.master.nodeSelector }}
@@ -218,6 +220,9 @@ spec:
             {{- range .Values.ufsVolumes }}
           - mountPath: {{ .containerPath }}
             name: {{ .name }}
+            {{- if .subPath }}
+            subPath: {{ .subPath }}
+            {{- end }}
             {{- end }}
           {{- end }}
           {{- if .Values.metastore }}
@@ -309,6 +314,9 @@ spec:
             {{- range .Values.ufsVolumes }}
           - mountPath: {{ .containerPath }}
             name: {{ .name }}
+            {{- if .subPath }}
+            subPath: {{ .subPath }}
+            {{- end }}
             {{- end }}
           {{- end }}
           {{- if .Values.mounts }}

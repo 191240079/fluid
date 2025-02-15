@@ -1,4 +1,5 @@
 /*
+Copyright 2021 The Fluid Author.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -99,11 +100,6 @@ type GooseFSFuseSpec struct {
 	// Arguments that will be passed to GooseFS Fuse
 	Args []string `json:"args,omitempty"`
 
-	// If the fuse client should be deployed in global mode,
-	// otherwise the affinity should be considered
-	// +optional
-	Global bool `json:"global,omitempty"`
-
 	// NodeSelector is a selector which must be true for the fuse client to fit on a node,
 	// this option only effect when global is enabled
 	// +optional
@@ -183,6 +179,10 @@ type GooseFSRuntimeSpec struct {
 	// of the file as the value.
 	// +optional
 	HadoopConfig string `json:"hadoopConfig,omitempty"`
+
+	// CleanCachePolicy defines cleanCache Policy
+	// +optional
+	CleanCachePolicy CleanCachePolicy `json:"cleanCachePolicy,omitempty"`
 }
 
 // +kubebuilder:object:root=true

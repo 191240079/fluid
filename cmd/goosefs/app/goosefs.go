@@ -16,6 +16,8 @@ limitations under the License.
 package app
 
 import (
+	"os"
+
 	"github.com/fluid-cloudnative/fluid"
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
 	goosefsctl "github.com/fluid-cloudnative/fluid/pkg/controllers/v1alpha1/goosefs"
@@ -29,10 +31,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/net"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 var (
@@ -43,10 +45,12 @@ var (
 
 	metricsAddr             string
 	enableLeaderElection    bool
+	leaderElectionNamespace string
 	development             bool
 	portRange               string
 	maxConcurrentReconciles int
 	pprofAddr               string
+	portAllocatePolicy      string
 )
 
 var cmd = &cobra.Command{
@@ -68,8 +72,10 @@ func init() {
 
 	startCmd.Flags().StringVarP(&metricsAddr, "metrics-addr", "", ":8080", "The address the metric endpoint binds to.")
 	startCmd.Flags().BoolVarP(&enableLeaderElection, "enable-leader-election", "", false, "Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+	startCmd.Flags().StringVarP(&leaderElectionNamespace, "leader-election-namespace", "", "fluid-system", "The namespace in which the leader election resource will be created.")
 	startCmd.Flags().BoolVarP(&development, "development", "", true, "Enable development mode for fluid controller.")
 	startCmd.Flags().StringVar(&portRange, "runtime-node-port-range", "20000-25000", "Set available port range for GooseFS")
+	startCmd.Flags().StringVar(&portAllocatePolicy, "port-allocate-policy", "random", "Set port allocating policy, available choice is bitmap or random(default random).")
 	startCmd.Flags().StringVarP(&pprofAddr, "pprof-addr", "", "", "The address for pprof to use while exporting profiling results")
 	startCmd.Flags().IntVar(&maxConcurrentReconciles, "runtime-workers", 3, "Set max concurrent workers for GooseFSRuntime controller")
 	cmd.AddCommand(startCmd)
@@ -91,14 +97,17 @@ func handle() {
 		}
 	}))
 
-	utils.NewPprofServer(setupLog, pprofAddr)
+	utils.NewPprofServer(setupLog, pprofAddr, development)
 
+	// the default webhook server port is 9443, no need to set
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "7857424864.data.fluid.io",
-		Port:               9443,
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		LeaderElection:          enableLeaderElection,
+		LeaderElectionNamespace: leaderElectionNamespace,
+		LeaderElectionID:        "goosefs.data.fluid.io",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start goosefsruntime manager")
@@ -125,7 +134,12 @@ func handle() {
 	}
 	setupLog.Info("port range parsed", "port range", pr.String())
 
-	portallocator.SetupRuntimePortAllocator(mgr.GetClient(), pr, goosefs.GetReservedPorts)
+	err = portallocator.SetupRuntimePortAllocator(mgr.GetClient(), pr, portAllocatePolicy, goosefs.GetReservedPorts)
+	if err != nil {
+		setupLog.Error(err, "failed to setup runtime port allocator")
+		os.Exit(1)
+	}
+	setupLog.Info("Set up runtime port allocator", "policy", portAllocatePolicy)
 
 	setupLog.Info("starting goosefsruntime-controller")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

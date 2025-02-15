@@ -1,4 +1,5 @@
 /*
+Copyright 2022 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,6 +32,10 @@ import (
 
 type controllerServer struct {
 	*csicommon.DefaultControllerServer
+}
+
+func (cs *controllerServer) ControllerGetVolume(ctx context.Context, request *csi.ControllerGetVolumeRequest) (*csi.ControllerGetVolumeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
 func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
@@ -95,8 +100,8 @@ func (cs *controllerServer) ValidateVolumeCapabilities(ctx context.Context, req 
 		Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
 	}
 
-	for _, cap := range req.VolumeCapabilities {
-		if cap.GetAccessMode().GetMode() != supportedAccessMode.GetMode() {
+	for _, volumeCap := range req.VolumeCapabilities {
+		if volumeCap.GetAccessMode().GetMode() != supportedAccessMode.GetMode() {
 			return &csi.ValidateVolumeCapabilitiesResponse{Message: "Only single node writer is supported"}, nil
 		}
 	}

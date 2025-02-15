@@ -21,9 +21,9 @@ import (
 	"testing"
 
 	datav1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	fluiderrs "github.com/fluid-cloudnative/fluid/pkg/errors"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/fluid-cloudnative/fluid/pkg/utils/fake"
 	appsv1 "k8s.io/api/apps/v1"
@@ -32,7 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	utilpointer "k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
 func TestGetWorkersAsStatefulset(t *testing.T) {
@@ -44,7 +44,7 @@ func TestGetWorkersAsStatefulset(t *testing.T) {
 				Namespace: "big-data",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(2),
+				Replicas: ptr.To[int32](2),
 			},
 			Status: appsv1.StatefulSetStatus{
 				ReadyReplicas: 1,
@@ -241,7 +241,7 @@ func TestCheckWorkersHealthy(t *testing.T) {
 				Namespace: "big-data",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(2),
+				Replicas: ptr.To[int32](2),
 			},
 			Status: appsv1.StatefulSetStatus{
 				ReadyReplicas: 1,
@@ -253,7 +253,7 @@ func TestCheckWorkersHealthy(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(3),
+				Replicas: ptr.To[int32](3),
 			},
 			Status: appsv1.StatefulSetStatus{
 				ReadyReplicas: 0,
@@ -265,7 +265,7 @@ func TestCheckWorkersHealthy(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(3),
+				Replicas: ptr.To[int32](3),
 			},
 			Status: appsv1.StatefulSetStatus{
 				ReadyReplicas: 1,
@@ -276,7 +276,7 @@ func TestCheckWorkersHealthy(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(3),
+				Replicas: ptr.To[int32](3),
 			},
 			Status: appsv1.StatefulSetStatus{
 				ReadyReplicas: 1,
@@ -324,7 +324,7 @@ func TestCheckWorkersHealthy(t *testing.T) {
 					Namespace: "big-data",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: utilpointer.Int32Ptr(2),
+					Replicas: ptr.To[int32](2),
 				},
 				Status: appsv1.StatefulSetStatus{
 					Replicas:      1,
@@ -345,7 +345,7 @@ func TestCheckWorkersHealthy(t *testing.T) {
 					Namespace: "fluid",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: utilpointer.Int32Ptr(3),
+					Replicas: ptr.To[int32](3),
 				},
 				Status: appsv1.StatefulSetStatus{
 					Replicas:      1,
@@ -364,7 +364,7 @@ func TestCheckWorkersHealthy(t *testing.T) {
 					Namespace: "fluid",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: utilpointer.Int32Ptr(2),
+					Replicas: ptr.To[int32](2),
 				},
 				Status: appsv1.StatefulSetStatus{
 					Replicas:      2,
@@ -377,7 +377,7 @@ func TestCheckWorkersHealthy(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 
-		runtimeInfo, err := base.BuildRuntimeInfo(testCase.name, testCase.namespace, "jindo", datav1alpha1.TieredStore{})
+		runtimeInfo, err := base.BuildRuntimeInfo(testCase.name, testCase.namespace, common.JindoRuntime)
 		if err != nil {
 			t.Errorf("testcase %s failed due to %v", testCase.name, err)
 		}
@@ -402,7 +402,7 @@ func TestCheckWorkersHealthy(t *testing.T) {
 			t.Errorf("sync replicas failed,err:%s", err.Error())
 		}
 
-		h := BuildHelper(runtimeInfo, fakeClient, log.NullLogger{})
+		h := BuildHelper(runtimeInfo, fakeClient, fake.NullLogger())
 
 		err = h.CheckWorkersHealthy(
 			record.NewFakeRecorder(300),

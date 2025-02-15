@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	v1alpha1 "github.com/fluid-cloudnative/fluid/api/v1alpha1"
+	"github.com/fluid-cloudnative/fluid/pkg/common"
 	"github.com/fluid-cloudnative/fluid/pkg/ctrl"
 	"github.com/fluid-cloudnative/fluid/pkg/ddc/base"
 	cruntime "github.com/fluid-cloudnative/fluid/pkg/runtime"
@@ -30,21 +31,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	utilpointer "k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 func newGooseFSEngineREP(client client.Client, name string, namespace string) *GooseFSEngine {
 
-	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, "goosefs", v1alpha1.TieredStore{})
+	runTimeInfo, _ := base.BuildRuntimeInfo(name, namespace, common.GooseFSRuntime)
 	engine := &GooseFSEngine{
 		runtime:     &v1alpha1.GooseFSRuntime{},
 		name:        name,
 		namespace:   namespace,
 		Client:      client,
 		runtimeInfo: runTimeInfo,
-		Log:         log.NullLogger{},
+		Log:         fake.NullLogger(),
 	}
 	engine.Helper = ctrl.BuildHelper(runTimeInfo, client, engine.Log)
 	return engine
@@ -173,7 +173,7 @@ func TestSyncReplicas(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(2),
+				Replicas: ptr.To[int32](2),
 			},
 		},
 		{
@@ -182,7 +182,7 @@ func TestSyncReplicas(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(2),
+				Replicas: ptr.To[int32](2),
 			},
 		},
 		{
@@ -191,7 +191,7 @@ func TestSyncReplicas(t *testing.T) {
 				Namespace: "fluid",
 			},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: utilpointer.Int32Ptr(2),
+				Replicas: ptr.To[int32](2),
 			},
 		},
 	}
@@ -299,7 +299,7 @@ func TestSyncReplicas(t *testing.T) {
 	for _, testCase := range testCases {
 		engine := newGooseFSEngineREP(fakeClient, testCase.name, testCase.namespace)
 		err := engine.SyncReplicas(cruntime.ReconcileRequestContext{
-			Log:      log.NullLogger{},
+			Log:      fake.NullLogger(),
 			Recorder: record.NewFakeRecorder(300),
 		})
 		if err != nil {

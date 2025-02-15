@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Author
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -107,9 +108,9 @@ func (e *GooseFSEngine) CheckWorkersReady() (ready bool, err error) {
 // getWorkerSelectors gets the selector of the worker
 func (e *GooseFSEngine) getWorkerSelectors() string {
 	labels := map[string]string{
-		"release":     e.name,
-		POD_ROLE_TYPE: WOKRER_POD_ROLE,
-		"app":         common.GooseFSRuntime,
+		"release":          e.name,
+		common.PodRoleType: WokrerPodRole,
+		"app":              common.GooseFSRuntime,
 	}
 	labelSelector := &metav1.LabelSelector{
 		MatchLabels: labels,

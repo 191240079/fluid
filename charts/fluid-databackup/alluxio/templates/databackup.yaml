@@ -5,12 +5,16 @@ metadata:
   {{- if .Values.dataBackup.namespace }}
   namespace: {{ .Values.dataBackup.namespace }}
   {{- end }}
+  labels:
+    {{- include "library.fluid.labels" . | nindent 4 }}
 spec:
   {{- if .Values.dataBackup.nodeName }}
   nodeName: {{ .Values.dataBackup.nodeName }}
   {{- end }}
-  securityContext:
-    fsGroup: {{ .Values.fsGroup }}
+  {{- with .Values.dataBackup.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{ if .Values.initUsers.enabled -}}
   initContainers:
     - name: init-users
@@ -85,6 +89,11 @@ spec:
           mountPath: /etc/group
           readOnly: true
         {{- end}}
+  {{- if .Values.dataBackup.affinity }}
+  affinity:
+{{ toYaml .Values.dataBackup.affinity | indent 4 }}
+  {{- end }}
+
   restartPolicy: Never
   volumes:
     {{- if .Values.dataBackup.workdir }}

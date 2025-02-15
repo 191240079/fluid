@@ -1,4 +1,5 @@
 /*
+Copyright 2023 The Fluid Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,7 +17,6 @@ limitations under the License.
 package utils
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -29,21 +29,16 @@ func TestPathExists(t *testing.T) {
 	if PathExists(path + "test/") {
 		t.Errorf("result of checking if the path exists is wrong")
 	}
-	_ = os.Remove(path)
 }
 
 func TestGetChartsDirectory(t *testing.T) {
-	f, err := ioutil.TempFile("", "test")
+	f, err := os.CreateTemp("", "test")
 	if err != nil {
 		t.Errorf("MkdirTemp failed due to %v", err)
 	}
 	testDir := f.Name()
-	home := os.Getenv("HOME")
 
-	defer os.RemoveAll(testDir)   // clean up
-	defer os.Setenv("HOME", home) // recover
-
-	os.Setenv("HOME", testDir)
+	t.Setenv("HOME", testDir)
 	if GetChartsDirectory() != "/charts" {
 		t.Errorf("ChartsDirectory should be /charts if ~/charts not exist")
 	}

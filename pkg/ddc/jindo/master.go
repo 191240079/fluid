@@ -1,3 +1,19 @@
+/*
+Copyright 2023 The Fluid Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package jindo
 
 import (
@@ -134,7 +150,7 @@ func (e *JindoEngine) SetupMaster() (err error) {
 		runtimeToUpdate.Status.Selector = e.getWorkerSelectors()
 
 		runtimeToUpdate.Status.DesiredMasterNumberScheduled = replicas
-		runtimeToUpdate.Status.ValueFileConfigmap = e.getConfigmapName()
+		runtimeToUpdate.Status.ValueFileConfigmap = e.getHelmValuesConfigmapName()
 
 		if len(runtimeToUpdate.Status.Conditions) == 0 {
 			runtimeToUpdate.Status.Conditions = []datav1alpha1.RuntimeCondition{}
